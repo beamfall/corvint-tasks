@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-09-13. Publication remains a separate action.
 
-Corvint decision 0107 selected the **GNU Affero General Public License, version 3.0 or later** for
+[Corvint decision 0107](https://github.com/Beamfall/corvint/blob/main/docs/decisions/0107-corvint-taskman-license-2026-09-12.md) selected the **GNU Affero General Public License, version 3.0 or later** for
 Corvint Tasks. The owner has now confirmed the factual prerequisite for `PROVENANCE.md`: he
 holds the copyright in this repository's source, and no employer, client, co-author,
 confidentiality agreement, or third-party restriction prevents its release under that license.

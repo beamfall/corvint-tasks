@@ -13,6 +13,6 @@ release under the license below.
 Corvint Tasks is licensed under the **GNU Affero General Public License, version 3.0 or
 later** (`LICENSE`). This repository defines no separately licensed path boundary.
 
-The license selection is recorded in Corvint decision 0107 and in this repository's decision 0005.
+The license selection is recorded in [Corvint decision 0107](https://github.com/Beamfall/corvint/blob/main/docs/decisions/0107-corvint-taskman-license-2026-09-12.md) and in this repository's decision 0005.
 This provenance statement records the owner's factual attestation; it does not claim publication,
 runtime qualification, or authority to operate a real queue.
