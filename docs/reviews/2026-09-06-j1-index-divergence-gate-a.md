@@ -1,0 +1,3 @@
+# J1 request-index divergence Gate A — 2026-09-06
+
+Independent native_read_audit PASS: request lookup must skip only intent projection equality/untracked checks, retain all non-intent checks and full chain/blob/request/snapshot validation, and report intent agreement NOT_OBSERVED. Suppressing an early INTENT_DIVERGED error is unsafe because required request checks may not have run. Witness strict Audit rejects stable D!=C while request replay/verified absence succeed; missing or corrupt required request projections still refuse all lookup modes and read purity remains. No HIGH/MED concern. Validated canonical retrieval during divergence remains an adjacent future reconciliation integration hold, not a grant from partial audit data. No tests ran.

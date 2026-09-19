@@ -1,0 +1,62 @@
+--- FAIL: TestTMV0010_AS10_DarwinStrictFullSyncBoundary (0.02s)
+    repair_darwin_test.go:40: strict boundary calls=0 err=<nil>
+--- FAIL: TestTMV0010_AS10_AmbiguousExtMagic (0.00s)
+    repair_test.go:17: ext2 shared magic qualified: {Platform:linux Type:ext4 Local:true}
+--- FAIL: TestTMV0010_AS10_UnsupportedPlatformBeforeEffects (0.00s)
+    repair_test.go:38: lock: &{{{} {0 0}} 0x37276e8544e0 /private/var/folders/zc/wb4tdm4x0c9dpkmkn8rdg9rw0000gn/T/atm-2545533058/repo/.git/taskman.lock {14024081113566810096 18211335 0x1025a8100} false} <nil>
+FAIL
+FAIL	corvint-tasks/internal/authority	0.265s
+--- FAIL: TestTMV0001_AS10_DirectorySwapNoRedirectOrBlock (0.21s)
+    --- FAIL: TestTMV0001_AS10_DirectorySwapNoRedirectOrBlock/leaf-symlink (0.00s)
+        open_test.go:88: swap accepted: fired=true err=<nil>
+    --- FAIL: TestTMV0001_AS10_DirectorySwapNoRedirectOrBlock/leaf-fifo (0.10s)
+        open_test.go:77: opening replacement FIFO blocked
+    --- FAIL: TestTMV0001_AS10_DirectorySwapNoRedirectOrBlock/ancestor-symlink (0.00s)
+        open_test.go:88: swap accepted: fired=true err=<nil>
+    --- FAIL: TestTMV0001_AS10_DirectorySwapNoRedirectOrBlock/ancestor-fifo (0.10s)
+        open_test.go:77: opening replacement FIFO blocked
+FAIL
+FAIL	corvint-tasks/internal/safeopen	0.536s
+--- FAIL: TestTMV0022_AS09_TerminalReadError (0.02s)
+    archive_test.go:729: accepted terminal I/O failure
+--- FAIL: TestTMV0022_AS09_PartialDelivery (0.02s)
+    archive_test.go:751: partial delivery: result=<nil> bytes=17 err=UNSUPPORTED_FILESYSTEM: stdout: copy failed: destination failed (count 17)
+--- FAIL: TestTMV0022_AS09_ContentAddressedNames (0.03s)
+    --- FAIL: TestTMV0022_AS09_ContentAddressedNames/evidence-mismatch (0.00s)
+        identity_test.go:57: bad name verified: <nil>
+    --- FAIL: TestTMV0022_AS09_ContentAddressedNames/evidence-uppercase (0.00s)
+        identity_test.go:57: bad name verified: <nil>
+    --- FAIL: TestTMV0022_AS09_ContentAddressedNames/evidence-nonhex (0.00s)
+        identity_test.go:57: bad name verified: <nil>
+    --- FAIL: TestTMV0022_AS09_ContentAddressedNames/evidence-short (0.00s)
+        identity_test.go:57: bad name verified: <nil>
+    --- FAIL: TestTMV0022_AS09_ContentAddressedNames/evidence-suffix (0.00s)
+        identity_test.go:57: bad name verified: <nil>
+    --- FAIL: TestTMV0022_AS09_ContentAddressedNames/evidence-nested (0.00s)
+        identity_test.go:57: bad name verified: <nil>
+    --- FAIL: TestTMV0022_AS09_ContentAddressedNames/pinned-mismatch (0.00s)
+        identity_test.go:57: bad name verified: <nil>
+    --- FAIL: TestTMV0022_AS09_ContentAddressedNames/pinned-uppercase (0.00s)
+        identity_test.go:57: bad name verified: <nil>
+    --- FAIL: TestTMV0022_AS09_ContentAddressedNames/pinned-nonhex (0.00s)
+        identity_test.go:57: bad name verified: <nil>
+    --- FAIL: TestTMV0022_AS09_ContentAddressedNames/pinned-short (0.00s)
+        identity_test.go:57: bad name verified: <nil>
+    --- FAIL: TestTMV0022_AS09_ContentAddressedNames/pinned-suffix (0.00s)
+        identity_test.go:57: bad name verified: <nil>
+    --- FAIL: TestTMV0022_AS09_ContentAddressedNames/pinned-nested (0.00s)
+        identity_test.go:57: bad name verified: <nil>
+--- FAIL: TestTMV0022_AS10_EncodedStreamLimit (0.01s)
+    stream_limit_test.go:28: verify cap=4649 stream=19456: <nil>
+FAIL
+FAIL	corvint-tasks/internal/archive	0.331s
+--- FAIL: TestTMV0008_AS36_ShowRetriesDiscardPriorAttempt (0.02s)
+    --- FAIL: TestTMV0008_AS36_ShowRetriesDiscardPriorAttempt/removed_gate (0.01s)
+        retry_test.go:26: calls=2 result=&{Command:[gate show] Outcome:OK Codes:[] Snapshot:0x38323ea2ae0 Mutation:<nil> Items:[{Kind:object Bool:false Str: Arr:[] Obj:0x38323d52b80}] Page:<nil> Untrusted:false Warnings:[]}
+    --- FAIL: TestTMV0008_AS36_ShowRetriesDiscardPriorAttempt/show_appearing_ticket (0.01s)
+        retry_test.go:42: calls=2 result=&{Command:[ticket show] Outcome:REFUSED Codes:[] Snapshot:0x38323fbad50 Mutation:<nil> Items:[] Page:<nil> Untrusted:false Warnings:[ticket ticket:acme:main:A does not exist in this queue]}
+    --- FAIL: TestTMV0008_AS36_ShowRetriesDiscardPriorAttempt/blockers_appearing_ticket (0.01s)
+        retry_test.go:42: calls=2 result=&{Command:[ticket blockers] Outcome:REFUSED Codes:[] Snapshot:0x383240e89c0 Mutation:<nil> Items:[] Page:<nil> Untrusted:false Warnings:[ticket ticket:acme:main:A does not exist in this queue]}
+FAIL
+FAIL	corvint-tasks/internal/cli	0.299s
+FAIL

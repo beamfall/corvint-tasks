@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/private/tmp/corvint-tasks-build-20260906/run_job.py", line 136, in <module>
+    raise SystemExit(supervise(**config))
+  File "/private/tmp/corvint-tasks-build-20260906/run_job.py", line 129, in supervise
+    stop()
+  File "/private/tmp/corvint-tasks-build-20260906/run_job.py", line 103, in stop
+    saved = descendants({child.pid}, process_snapshot())
+  File "/private/tmp/corvint-tasks-build-20260906/run_job.py", line 19, in process_snapshot
+    result = subprocess.run(['/bin/ps', '-axo', 'pid=,ppid=,lstart='],
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 505, in run
+    with Popen(*popenargs, **kwargs) as process:
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 951, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 1821, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+PermissionError: [Errno 1] Operation not permitted: '/bin/ps'

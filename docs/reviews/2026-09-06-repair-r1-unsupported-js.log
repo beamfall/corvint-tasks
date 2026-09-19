@@ -1,0 +1,4 @@
+=== RUN   TestTMV0010_AS10_UnsupportedPlatformBeforeEffects
+--- PASS: TestTMV0010_AS10_UnsupportedPlatformBeforeEffects (0.01s)
+PASS
+ok  	corvint-tasks/internal/authority	0.103s

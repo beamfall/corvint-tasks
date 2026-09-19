@@ -1,0 +1,9 @@
+{
+  "sourceCount": 65,
+  "sourceSHA256Match": true,
+  "goBinarySHA256Match": true,
+  "supervisorExitCode": 1,
+  "supervisorExitRecordExists": false,
+  "canonicalGateInvocations": 1,
+  "limitation": "run_job.py final process_snapshot denied /bin/ps; child exit code was not recorded"
+}

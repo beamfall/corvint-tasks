@@ -1,0 +1,11 @@
+=== RUN   TestTMV0008_AS07_FIFOSetupFailure
+=== RUN   TestTMV0008_AS07_FIFOSetupFailure/mkfifo
+    fifo_test.go:161: FIFO readiness timed out
+=== RUN   TestTMV0008_AS07_FIFOSetupFailure/remove
+    fifo_test.go:161: FIFO readiness timed out
+--- FAIL: TestTMV0008_AS07_FIFOSetupFailure (10.01s)
+    --- FAIL: TestTMV0008_AS07_FIFOSetupFailure/mkfifo (5.01s)
+    --- FAIL: TestTMV0008_AS07_FIFOSetupFailure/remove (5.01s)
+FAIL
+FAIL	corvint-tasks/internal/intent	10.297s
+FAIL

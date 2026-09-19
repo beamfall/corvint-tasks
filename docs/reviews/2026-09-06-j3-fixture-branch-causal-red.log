@@ -1,0 +1,6 @@
+--- FAIL: TestTMV0001_AS10_FixtureFoundationSourceLifetime (0.66s)
+    --- FAIL: TestTMV0001_AS10_FixtureFoundationSourceLifetime/ticket-branch-other (0.31s)
+        fixture_transaction_fault_test.go:507: invalid actual bytes accepted
+FAIL
+FAIL	corvint-tasks/internal/authority	0.958s
+FAIL

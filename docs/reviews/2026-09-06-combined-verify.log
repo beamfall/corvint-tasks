@@ -1,0 +1,16 @@
+GOTOOLCHAIN=local go test -count=1 ./...
+?   	corvint-tasks/cmd/atm	[no test files]
+ok  	corvint-tasks/internal/archive	8.114s
+ok  	corvint-tasks/internal/authority	0.838s
+ok  	corvint-tasks/internal/cli	0.369s
+?   	corvint-tasks/internal/fixture	[no test files]
+ok  	corvint-tasks/internal/intent	1.378s
+--- FAIL: TestTMV0007_AS35_ProtectedFieldsAndIdentity (0.00s)
+    adopt_test.go:558: completion: VALIDATION_FAILED [MALFORMED] (MALFORMED: /completion: completion is non-null only while the effective status is COMPLETED (is OPEN))
+FAIL
+FAIL	corvint-tasks/internal/mutation	0.216s
+ok  	corvint-tasks/internal/snapshot	0.200s
+ok  	corvint-tasks/internal/ticket	0.204s
+ok  	corvint-tasks/internal/wire	0.235s
+FAIL
+make: *** [test] Error 1

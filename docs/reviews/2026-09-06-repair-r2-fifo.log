@@ -1,0 +1,32 @@
+=== RUN   TestTMV0008_AS07_FIFOChild
+--- PASS: TestTMV0008_AS07_FIFOChild (0.00s)
+=== RUN   TestTMV0008_AS07_ReadBoundedFIFORegression
+=== RUN   TestTMV0008_AS07_ReadBoundedFIFORegression/legacy
+    fifo_test.go:219: boundary=legacy ready=true blocked=true exit=0
+=== RUN   TestTMV0008_AS07_ReadBoundedFIFORegression/safe
+    fifo_test.go:219: boundary=safe ready=true blocked=false exit=0
+--- PASS: TestTMV0008_AS07_ReadBoundedFIFORegression (0.07s)
+    --- PASS: TestTMV0008_AS07_ReadBoundedFIFORegression/legacy (0.06s)
+    --- PASS: TestTMV0008_AS07_ReadBoundedFIFORegression/safe (0.01s)
+=== RUN   TestTMV0008_AS07_ReadInRootFIFORegression
+--- PASS: TestTMV0008_AS07_ReadInRootFIFORegression (0.01s)
+=== RUN   TestTMV0008_AS07_FIFOSetupFailure
+=== RUN   TestTMV0008_AS07_FIFOSetupFailure/mkfifo
+=== RUN   TestTMV0008_AS07_FIFOSetupFailure/remove
+--- PASS: TestTMV0008_AS07_FIFOSetupFailure (0.01s)
+    --- PASS: TestTMV0008_AS07_FIFOSetupFailure/mkfifo (0.01s)
+    --- PASS: TestTMV0008_AS07_FIFOSetupFailure/remove (0.01s)
+=== RUN   TestTMV0008_AS07_FIFOReleaseFailureAndInterruption
+=== RUN   TestTMV0008_AS07_FIFOReleaseFailureAndInterruption/signal_0
+=== RUN   TestTMV0008_AS07_FIFOReleaseFailureAndInterruption/interrupt
+=== RUN   TestTMV0008_AS07_FIFOReleaseFailureAndInterruption/terminated
+=== RUN   TestTMV0008_AS07_FIFOReleaseFailureAndInterruption/killed
+--- PASS: TestTMV0008_AS07_FIFOReleaseFailureAndInterruption (0.24s)
+    --- PASS: TestTMV0008_AS07_FIFOReleaseFailureAndInterruption/signal_0 (0.06s)
+    --- PASS: TestTMV0008_AS07_FIFOReleaseFailureAndInterruption/interrupt (0.06s)
+    --- PASS: TestTMV0008_AS07_FIFOReleaseFailureAndInterruption/terminated (0.06s)
+    --- PASS: TestTMV0008_AS07_FIFOReleaseFailureAndInterruption/killed (0.06s)
+=== RUN   TestTMV0008_AS07_FIFODeadline
+--- PASS: TestTMV0008_AS07_FIFODeadline (0.06s)
+PASS
+ok  	corvint-tasks/internal/intent	0.699s

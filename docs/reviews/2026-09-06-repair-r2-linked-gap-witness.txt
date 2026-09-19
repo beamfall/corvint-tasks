@@ -1,0 +1,20 @@
+package archive
+import (
+ "path/filepath"
+ "testing"
+ "corvint-tasks/internal/fixture"
+ "corvint-tasks/internal/intent"
+)
+func TestTMV0022_AS36_LinkedStagingGap(t *testing.T) {
+ r, _ := repoWithStore(t)
+ linked := fixture.TempDirOutside(t)
+ wtGit := filepath.Join(r.CommonDir, "worktrees", "linked")
+ fixture.Write(t, filepath.Join(wtGit,"commondir"), []byte("../..\n"))
+ fixture.Write(t, filepath.Join(wtGit,"gitdir"), []byte(filepath.Join(linked,".git")+"\n"))
+ fixture.Write(t, filepath.Join(linked,".git"), []byte("gitdir: "+wtGit+"\n"))
+ repo, err := intent.Resolve(linked)
+ if err != nil || !repo.FromLinkedWorktree { t.Fatalf("fixture: %v",err) }
+ root, err := checkStaging(linked, repo)
+ if root != nil { defer root.Close() }
+ if err == nil { t.Fatal("confirmed gap: linked repository worktree accepted as outside staging") }
+}

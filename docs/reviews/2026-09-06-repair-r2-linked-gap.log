@@ -1,0 +1,5 @@
+--- FAIL: TestTMV0022_AS36_LinkedStagingGap (0.01s)
+    linked_gap_test.go:19: confirmed gap: linked repository worktree accepted as outside staging
+FAIL
+FAIL	corvint-tasks/internal/archive	0.244s
+FAIL

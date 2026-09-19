@@ -1,0 +1,5 @@
+--- FAIL: TestTMV0009_AS11_FixtureFoundationStaleInventory (0.40s)
+    fixture_transaction_fault_test.go:853: stale inventory started an era
+FAIL
+FAIL	corvint-tasks/internal/authority	0.697s
+FAIL

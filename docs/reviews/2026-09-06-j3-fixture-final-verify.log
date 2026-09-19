@@ -1,0 +1,15 @@
+GOTOOLCHAIN=local go test -count=1 ./...
+?   	corvint-tasks/cmd/atm	[no test files]
+ok  	corvint-tasks/internal/archive	16.187s
+ok  	corvint-tasks/internal/authority	129.640s
+ok  	corvint-tasks/internal/cli	0.571s
+?   	corvint-tasks/internal/fixture	[no test files]
+ok  	corvint-tasks/internal/intent	22.410s
+ok  	corvint-tasks/internal/journal	2.162s
+ok  	corvint-tasks/internal/mutation	0.275s
+ok  	corvint-tasks/internal/safeopen	0.210s
+ok  	corvint-tasks/internal/snapshot	3.375s
+ok  	corvint-tasks/internal/ticket	0.212s
+ok  	corvint-tasks/internal/transaction	4.081s
+ok  	corvint-tasks/internal/wire	0.228s
+GOTOOLCHAIN=local go vet ./...

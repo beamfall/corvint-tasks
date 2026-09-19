@@ -1,0 +1,28 @@
+=== RUN   TestTMV0022_AS09_TerminalReadError
+--- PASS: TestTMV0022_AS09_TerminalReadError (0.01s)
+=== RUN   TestTMV0022_AS09_PartialDelivery
+--- PASS: TestTMV0022_AS09_PartialDelivery (0.01s)
+=== RUN   TestTMV0022_AS36_StagingDirectorySwap
+--- PASS: TestTMV0022_AS36_StagingDirectorySwap (0.01s)
+=== RUN   TestTMV0022_AS36_StagingFileReplacement
+--- PASS: TestTMV0022_AS36_StagingFileReplacement (0.01s)
+=== RUN   TestTMV0022_AS36_StagingFailuresBeforeDelivery
+=== RUN   TestTMV0022_AS36_StagingFailuresBeforeDelivery/unlink
+=== RUN   TestTMV0022_AS36_StagingFailuresBeforeDelivery/verify_seek
+=== RUN   TestTMV0022_AS36_StagingFailuresBeforeDelivery/delivery_seek
+--- PASS: TestTMV0022_AS36_StagingFailuresBeforeDelivery (0.03s)
+    --- PASS: TestTMV0022_AS36_StagingFailuresBeforeDelivery/unlink (0.01s)
+    --- PASS: TestTMV0022_AS36_StagingFailuresBeforeDelivery/verify_seek (0.01s)
+    --- PASS: TestTMV0022_AS36_StagingFailuresBeforeDelivery/delivery_seek (0.01s)
+=== RUN   TestTMV0022_AS10_EncodedStreamLimit
+--- PASS: TestTMV0022_AS10_EncodedStreamLimit (0.04s)
+=== RUN   TestTMV0022_AS10_EncodedLimitIncludesPAX
+--- PASS: TestTMV0022_AS10_EncodedLimitIncludesPAX (0.00s)
+=== RUN   TestTMV0022_AS09_BytesAndSourceError
+=== RUN   TestTMV0022_AS09_BytesAndSourceError/footer
+=== RUN   TestTMV0022_AS09_BytesAndSourceError/complete_manifest_body
+--- PASS: TestTMV0022_AS09_BytesAndSourceError (0.01s)
+    --- PASS: TestTMV0022_AS09_BytesAndSourceError/footer (0.00s)
+    --- PASS: TestTMV0022_AS09_BytesAndSourceError/complete_manifest_body (0.00s)
+PASS
+ok  	corvint-tasks/internal/archive	0.424s

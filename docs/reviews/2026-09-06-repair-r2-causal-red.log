@@ -1,0 +1,13 @@
+--- FAIL: TestTMV0022_AS36_StagingDirectorySwap (0.02s)
+    staging_test.go:29: staging pathname swap wrote 1 entries inside repository
+    staging_test.go:35: repository changed
+--- FAIL: TestTMV0022_AS36_StagingFileReplacement (0.02s)
+    staging_test.go:50: staging remains pathname-addressable after writing
+    staging_test.go:66: delivery reopened replacement: MALFORMED: manifest.json: stream does not start with a tar entry: unexpected EOF
+    staging_test.go:68: cleanup removed/replaced another file: open /private/var/folders/zc/wb4tdm4x0c9dpkmkn8rdg9rw0000gn/T/atm-staging-3375449040/atm-archive-617499641.tar: no such file or directory
+--- FAIL: TestTMV0022_AS09_BytesAndSourceError (0.01s)
+    --- FAIL: TestTMV0022_AS09_BytesAndSourceError/footer (0.00s)
+        stream_limit_test.go:111: bytes+EIO accepted/lost: hit=true result=true err=<nil>
+FAIL
+FAIL	corvint-tasks/internal/archive	0.404s
+FAIL

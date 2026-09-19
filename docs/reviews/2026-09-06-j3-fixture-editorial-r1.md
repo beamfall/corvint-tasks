@@ -1,0 +1,1 @@
+REPAIR — two documentation clarifications selected and applied: C1 receipt/head temp cleanup per section5.2 versus fixture staging ownership/durability per section5.5 item5; C3 absent destination allowed only when PRE is null. Otherwise source/build hashes, gate/review and fixture-only holds passed independent inspection.

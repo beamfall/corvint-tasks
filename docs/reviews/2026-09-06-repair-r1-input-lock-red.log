@@ -1,0 +1,16 @@
+--- FAIL: TestTMV0007_AS35_ProtectedFieldsAndIdentity (0.00s)
+    adopt_test.go:558: completion: VALIDATION_FAILED [MALFORMED] (MALFORMED: /completion: completion is non-null only while the effective status is COMPLETED (is OPEN))
+--- FAIL: TestTMV0005_ContextInputsRequired (0.00s)
+    mutation_test.go:1058: outcome COMPLETED (codes [], detail ""); want VALIDATION_FAILED
+FAIL
+FAIL	corvint-tasks/internal/mutation	0.488s
+--- FAIL: TestTMV0009_AS10_LockInterruptedDeadlineAndCancellation (0.01s)
+    --- FAIL: TestTMV0009_AS10_LockInterruptedDeadlineAndCancellation/deadline (0.01s)
+        inject_test.go:342: deadline: UNSUPPORTED_FILESYSTEM: /private/var/folders/zc/wb4tdm4x0c9dpkmkn8rdg9rw0000gn/T/atm-3045145588/repo/.git/taskman.lock: flock failed: input/output error
+    --- FAIL: TestTMV0009_AS10_LockInterruptedDeadlineAndCancellation/cancel-EINTR (0.00s)
+        inject_test.go:345: cancel: UNSUPPORTED_FILESYSTEM: /private/var/folders/zc/wb4tdm4x0c9dpkmkn8rdg9rw0000gn/T/atm-3045145588/repo/.git/taskman.lock: flock failed: input/output error
+    --- FAIL: TestTMV0009_AS10_LockInterruptedDeadlineAndCancellation/cancel-acquired (0.00s)
+        inject_test.go:339: returned an acquired lock after cancellation
+FAIL
+FAIL	corvint-tasks/internal/authority	0.291s
+FAIL
