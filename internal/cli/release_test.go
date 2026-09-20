@@ -167,6 +167,8 @@ func recordPublicReleaseGate(t *testing.T, root, releaseID, revision, candidate,
 
 // TM-V0-028 and TM-V0-029 / AS-38: public output drives both ordered promotions.
 func TestTMV0028_AS38_PublicOutputDrivesOrderedReleasePromotion(t *testing.T) {
+	const requirementClaims = "TM-V0-028 TM-V0-029"
+	_ = requirementClaims
 	r := fixture.TempRepo(t)
 	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
 	fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), fixture.PolicyBytes())
