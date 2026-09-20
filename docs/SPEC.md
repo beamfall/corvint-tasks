@@ -2577,6 +2577,7 @@ UNPUBLISHED, UNRESOLVED_FINDING, UNSUPPORTED, UNSUPPORTED_FILESYSTEM, UNSUPPORTE
 | 026 | 011, 014 | §5 | — | AS-17, AS-28 |
 | 027 | 020 (evidence rule); owner steering 2026-09-06 | — | 03, 04, 06, 07 | AS-31, AS-32 (GP) |
 | 028 | owner decision 0009 | ATM-V0-028 | 02 | AS-38 |
+| 029 | owner decision 0009 (public read closure for 028) | ATM-V0-028 | 02 | AS-38 |
 
 The table maps obligations to slices and acceptance scenarios. Executed support/fixture evidence is recorded in `docs/reviews/`; unimplemented runtime and qualification scenarios remain NOT_RUN. A passed package or repository gate does not fill a qualification cell.
 
@@ -2588,6 +2589,6 @@ Candidate ticket and predecessor bindings are semantic arrays in their release d
 
 Definitions reject unknown required gate IDs before commit. Attestations must supply the current candidate digest; the writer never rebinds stale evidence. Promotion binds only passing, compatible evidence for that candidate. Release CLI payloads accept insignificant JSON whitespace (including stdin) and derive authorization from parsed provenance. Source identity includes file mode and type plus file contents or symlink target. Every writer carries the complete canonical ticket and release inventory.
 
-`release list` is a bounded summary. `release show` and `release readiness` additionally expose the complete definition, nullable `candidateSha256` and candidate bindings, attestations with evidence and canonical `attestationSha256`, and nullable promotion detail and canonical `promotionSha256`; readiness adds its state, missing conditions, and `nativeGateExecution`. These public canonical digests are sufficient to record compatible evidence and bind a successor without reading `.taskman` projections.
+TM-V0-029 closes the public read surface: `release list` is a bounded summary. `release show` and `release readiness` additionally expose the complete definition, nullable `candidateSha256` and candidate bindings, attestations with evidence and canonical `attestationSha256`, and nullable promotion detail and canonical `promotionSha256`; readiness adds its state, missing conditions, and `nativeGateExecution`. These public canonical digests are sufficient to record compatible evidence and bind a successor without reading `.taskman` projections.
 
 AS-38 proves two ordered releases, a public-output-only candidate/attestation/promotion workflow and predecessor binding, missing-gate blocking, compatible attestation readiness, promotion, invalidation by source/ticket/policy/predecessor change (including chmod), policy removal, rejection of unknown gates and stale attestations, manual payload routing, ticket/barrier/reconciliation interoperability, durable replay and pending-receipt redo, and refusal outside the fixture boundary. Active staging recovery remains NOT_RUN.
