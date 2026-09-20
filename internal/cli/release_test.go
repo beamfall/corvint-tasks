@@ -132,6 +132,135 @@ func createTicket(t *testing.T, root, request string) string {
 	return field(x.res.Items[0], "ticketId").Str
 }
 
+func completeReleaseTicket(t *testing.T, root, request, ticketID string) {
+	t.Helper()
+	x := atm(t, root, nil, "ticket", "complete-manual", "--request-id", request, "--target", ticketID, "--expected-revision", "1", "--issued-at", "2026-09-20T12:01:00Z", "--payload", `{"evidence":[],"reason":"release accepted"}`)
+	if x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("ticket complete: %+v", x.res)
+	}
+}
+
+func publicReleaseCandidate(t *testing.T, root, releaseID string) (revision, digest string, item wire.Value) {
+	t.Helper()
+	x := atm(t, root, nil, "release", "show", releaseID)
+	if x.res.Outcome != wire.OutcomeOK || len(x.res.Items) != 1 {
+		t.Fatalf("release show %s: %+v", releaseID, x.res)
+	}
+	item = x.res.Items[0]
+	revision = field(item, "revision").Str
+	digestValue := field(item, "candidateSha256")
+	if digestValue.Kind != wire.KindString {
+		t.Fatalf("release show %s omitted candidate digest: %+v", releaseID, item)
+	}
+	return revision, digestValue.Str, item
+}
+
+func recordPublicReleaseGate(t *testing.T, root, releaseID, revision, candidate, request string) {
+	t.Helper()
+	evidence := wire.Sum([]byte("public workflow evidence for " + releaseID))
+	payload := fmt.Sprintf(`{"attestation":{"actor":"external-ci","attestationId":%q,"candidateSha256":%q,"criteria":["0"],"evidence":[%q],"gateId":"verify","profile":"taskman-release-attestation/0","provenance":"EXTERNAL_ATTESTATION","recordedAt":"2026-09-20T12:04:00Z","result":"PASS","sourceIdentity":"external-ci"}}`, request, candidate, evidence)
+	x := atm(t, root, nil, "release", "record-gate", "--request-id", request, "--target", releaseID, "--expected-revision", revision, "--issued-at", "2026-09-20T12:04:00Z", "--payload", payload)
+	if x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("record gate %s: %+v", releaseID, x.res)
+	}
+}
+
+func TestTMV0028_AS38_PublicOutputDrivesOrderedReleasePromotion(t *testing.T) {
+	r := fixture.TempRepo(t)
+	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
+	fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), fixture.PolicyBytes())
+	fixture.Write(t, filepath.Join(r.Root, "source.txt"), []byte("public release workflow\n"))
+	git(t, r.Root, "init")
+	git(t, r.Root, "config", "user.email", "fixture@example.invalid")
+	git(t, r.Root, "config", "user.name", "Fixture")
+	git(t, r.Root, "add", ".taskman", "source.txt")
+	git(t, r.Root, "commit", "-m", "fixture baseline")
+	if x := atm(t, r.Root, nil, "init"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("init: %+v", x.res)
+	}
+
+	t09 := createTicket(t, r.Root, "public-ticket-v0-9")
+	t10 := createTicket(t, r.Root, "public-ticket-v1-0")
+	for _, releaseCase := range []struct {
+		id, version, title, ticket, predecessor, request string
+	}{
+		{"v0-9", "0-9", "Version 0.9", t09, "", "public-release-v0-9"},
+		{"v1-0", "1-0", "Version 1.0", t10, "v0-9", "public-release-v1-0"},
+	} {
+		x := atm(t, r.Root, nil, "release", "create", "--request-id", releaseCase.request, "--target", releaseCase.id, "--issued-at", "2026-09-20T12:02:00Z", "--payload", releaseCreatePayload(releaseCase.version, releaseCase.title, releaseCase.ticket, releaseCase.predecessor))
+		if x.res.Outcome != wire.OutcomeOK {
+			t.Fatalf("release create %s: %+v", releaseCase.id, x.res)
+		}
+	}
+	list := atm(t, r.Root, nil, "release", "list")
+	if list.res.Outcome != wire.OutcomeOK || len(list.res.Items) != 2 {
+		t.Fatalf("release list: %+v", list.res)
+	}
+	_, listHasCandidateDigest := list.res.Items[0].Obj.Get("candidateSha256")
+	if listHasCandidateDigest {
+		t.Fatalf("release list is not bounded summary output: %+v", list.res)
+	}
+	before := atm(t, r.Root, nil, "release", "show", "v0-9")
+	if before.res.Outcome != wire.OutcomeOK || field(before.res.Items[0], "candidateSha256").Kind != wire.KindNull || field(before.res.Items[0], "candidateBinding").Kind != wire.KindNull || field(before.res.Items[0], "promotionSha256").Kind != wire.KindNull || field(before.res.Items[0], "promotion").Kind != wire.KindNull {
+		t.Fatalf("uncaptured release detail: %+v", before.res)
+	}
+
+	completeReleaseTicket(t, r.Root, "public-complete-v0-9", t09)
+	if x := atm(t, r.Root, nil, "release", "candidate", "--request-id", "public-candidate-v0-9", "--target", "v0-9", "--expected-revision", "1", "--issued-at", "2026-09-20T12:03:00Z"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("candidate v0-9: %+v", x.res)
+	}
+	revision09, candidate09, show09 := publicReleaseCandidate(t, r.Root, "v0-9")
+	if field(show09, "ticketIds").Arr[0].Str != t09 || len(field(show09, "acceptanceCriteria").Arr) != 1 || len(field(show09, "requiredGates").Arr) != 0 || field(field(show09, "candidateBinding"), "tickets").Arr[0].Obj == nil {
+		t.Fatalf("incomplete release definition or candidate binding: %+v", show09)
+	}
+	recordPublicReleaseGate(t, r.Root, "v0-9", revision09, candidate09, "public-gate-v0-9")
+	ready09 := atm(t, r.Root, nil, "release", "readiness", "v0-9")
+	if ready09.res.Outcome != wire.OutcomeOK || field(ready09.res.Items[0], "readiness").Str != release.ReadyAttested || len(field(ready09.res.Items[0], "attestations").Arr) != 1 {
+		t.Fatalf("public readiness v0-9: %+v", ready09.res)
+	}
+	attestation09 := field(ready09.res.Items[0], "attestations").Arr[0]
+	attestationDigest09 := field(attestation09, "attestationSha256").Str
+	if field(attestation09, "profile").Str != release.AttestationProfile || field(attestation09, "candidateSha256").Str != candidate09 || len(field(attestation09, "evidence").Arr) != 1 || attestationDigest09 == "" {
+		t.Fatalf("public attestation v0-9: %+v", attestation09)
+	}
+	revision09 = field(ready09.res.Items[0], "revision").Str
+	if x := atm(t, r.Root, nil, "release", "promote", "--request-id", "public-promote-v0-9", "--target", "v0-9", "--expected-revision", revision09, "--issued-at", "2026-09-20T12:05:00Z"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("promote v0-9: %+v", x.res)
+	}
+	promoted09 := atm(t, r.Root, nil, "release", "show", "v0-9")
+	promotion09 := field(promoted09.res.Items[0], "promotionSha256").Str
+	promotionDetail09 := field(promoted09.res.Items[0], "promotion")
+	if promoted09.res.Outcome != wire.OutcomeOK || promotion09 == "" || field(promotionDetail09, "candidateSha256").Str != candidate09 || field(promotionDetail09, "attestationSha256s").Arr[0].Str != attestationDigest09 {
+		t.Fatalf("public promotion v0-9: %+v", promoted09.res)
+	}
+
+	completeReleaseTicket(t, r.Root, "public-complete-v1-0", t10)
+	if x := atm(t, r.Root, nil, "release", "candidate", "--request-id", "public-candidate-v1-0", "--target", "v1-0", "--expected-revision", "1", "--issued-at", "2026-09-20T12:06:00Z"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("candidate v1-0: %+v", x.res)
+	}
+	revision10, candidate10, show10 := publicReleaseCandidate(t, r.Root, "v1-0")
+	predecessors := field(field(show10, "candidateBinding"), "predecessors").Arr
+	if len(predecessors) != 1 || field(predecessors[0], "releaseId").Str != "v0-9" || field(predecessors[0], "promotionSha256").Str != promotion09 {
+		t.Fatalf("successor did not bind public predecessor promotion: %+v", show10)
+	}
+	recordPublicReleaseGate(t, r.Root, "v1-0", revision10, candidate10, "public-gate-v1-0")
+	ready10 := atm(t, r.Root, nil, "release", "readiness", "v1-0")
+	if ready10.res.Outcome != wire.OutcomeOK || field(ready10.res.Items[0], "readiness").Str != release.ReadyAttested {
+		t.Fatalf("public readiness v1-0: %+v", ready10.res)
+	}
+	if x := atm(t, r.Root, nil, "release", "promote", "--request-id", "public-promote-v1-0", "--target", "v1-0", "--expected-revision", field(ready10.res.Items[0], "revision").Str, "--issued-at", "2026-09-20T12:07:00Z"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("promote v1-0: %+v", x.res)
+	}
+	final10 := atm(t, r.Root, nil, "release", "show", "v1-0")
+	if final10.res.Outcome != wire.OutcomeOK || len(final10.res.Items) != 1 {
+		t.Fatalf("show promoted v1-0: %+v", final10.res)
+	}
+	show10 = final10.res.Items[0]
+	if field(show10, "promotionSha256").Str == "" || field(field(show10, "promotion"), "predecessors").Arr[0].Obj == nil {
+		t.Fatalf("public promotion v1-0: %+v", show10)
+	}
+}
+
 // TestTMV0028_AS38_DurableTwoReleaseCreateAndReplay is the earliest durable
 // multi-release path: two ordered projections commit through the ordinary
 // receipt-before-state writer, and replay wins after later release changes.

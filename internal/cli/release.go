@@ -128,7 +128,7 @@ func releaseRead(env Env, verb string, args []string) *wire.Result {
 		return errorResult(cmd, wire.Errorf(wire.CodeMalformed, "releaseId", "release absent"))
 	}
 	if verb == "show" {
-		return &wire.Result{Command: cmd, Outcome: wire.OutcomeOK, Items: []wire.Value{releaseSummary(target)}}
+		return &wire.Result{Command: cmd, Outcome: wire.OutcomeOK, Items: []wire.Value{releaseDetail(target)}}
 	}
 	head, _, source, err := store.ObserveSource(repo.PrimaryWorktree, false)
 	if err != nil {
@@ -151,11 +151,68 @@ func releaseRead(env Env, verb string, args []string) *wire.Result {
 		gates[i] = release.Gate{GateID: g.GateID, Kind: g.Kind, Required: g.Required}
 	}
 	ready := release.Assess(target, gates, release.Observation{HeadCommit: head, SourceSha256: source, PolicySha256: wire.Sum(st.Policy.Raw), Tickets: tickets, TicketDigests: td, PredecessorPromotions: pred})
-	o := releaseSummary(target).Obj
+	o := releaseDetail(target).Obj
 	o.Set("readiness", wire.String(ready.State)).Set("missing", wire.Strings(ready.Missing)).Set("nativeGateExecution", wire.String("NOT_RUN"))
 	return &wire.Result{Command: cmd, Outcome: wire.OutcomeOK, Items: []wire.Value{wire.ObjectValue(o)}}
 }
 
 func releaseSummary(r *release.Record) wire.Value {
 	return wire.ObjectValue(wire.NewObject().Set("releaseId", wire.String(r.ReleaseID)).Set("revision", wire.String(string(r.Revision))).Set("version", wire.String(r.Version)).Set("title", wire.String(r.Title)).Set("candidate", wire.Bool(r.Candidate != nil)).Set("promoted", wire.Bool(r.Promotion != nil)))
+}
+
+func releaseDetail(r *release.Record) wire.Value {
+	o := releaseSummary(r).Obj
+	ticketIDs := make([]string, len(r.TicketIDs))
+	for i, id := range r.TicketIDs {
+		ticketIDs[i] = id.Raw
+	}
+	o.Set("predecessorReleaseIds", wire.Strings(r.PredecessorIDs)).Set("ticketIds", wire.Strings(ticketIDs)).Set("acceptanceCriteria", wire.Strings(r.AcceptanceCriteria)).Set("requiredGates", wire.Strings(r.RequiredGates))
+	if r.Candidate == nil {
+		o.Set("candidateSha256", wire.Null()).Set("candidateBinding", wire.Null())
+	} else {
+		o.Set("candidateSha256", wire.String(string(release.CandidateDigest(r.Candidate)))).Set("candidateBinding", candidateBindingValue(r.Candidate))
+	}
+	attestations := make([]wire.Value, len(r.Attestations))
+	for i, a := range r.Attestations {
+		criteria := make([]string, len(a.Criteria))
+		for j, criterion := range a.Criteria {
+			criteria[j] = string(criterion)
+		}
+		evidence := make([]string, len(a.Evidence))
+		for j, digest := range a.Evidence {
+			evidence[j] = string(digest)
+		}
+		attestations[i] = wire.ObjectValue(wire.NewObject().Set("profile", wire.String(release.AttestationProfile)).Set("attestationId", wire.String(a.AttestationID)).Set("attestationSha256", wire.String(string(release.AttestationDigest(a)))).Set("candidateSha256", wire.String(string(a.CandidateSha256))).Set("gateId", wire.String(a.GateID)).Set("provenance", wire.String(a.Provenance)).Set("actor", wire.String(a.Actor)).Set("recordedAt", wire.String(string(a.RecordedAt))).Set("result", wire.String(a.Result)).Set("criteria", wire.Strings(criteria)).Set("evidence", wire.Strings(evidence)).Set("sourceIdentity", wire.String(a.SourceIdentity)))
+	}
+	o.Set("attestations", wire.Array(attestations...))
+	if r.Promotion == nil {
+		o.Set("promotionSha256", wire.Null()).Set("promotion", wire.Null())
+	} else {
+		o.Set("promotionSha256", wire.String(string(release.PromotionDigest(r.Promotion)))).Set("promotion", promotionValue(r.Promotion))
+	}
+	return wire.ObjectValue(o)
+}
+
+func predecessorBindingValues(bindings []release.PredecessorBinding) wire.Value {
+	values := make([]wire.Value, len(bindings))
+	for i, binding := range bindings {
+		values[i] = wire.ObjectValue(wire.NewObject().Set("releaseId", wire.String(binding.ReleaseID)).Set("promotionSha256", wire.String(string(binding.PromotionSha256))))
+	}
+	return wire.Array(values...)
+}
+
+func candidateBindingValue(candidate *release.Candidate) wire.Value {
+	tickets := make([]wire.Value, len(candidate.Tickets))
+	for i, binding := range candidate.Tickets {
+		tickets[i] = wire.ObjectValue(wire.NewObject().Set("ticketId", wire.String(binding.TicketID.Raw)).Set("recordSha256", wire.String(string(binding.RecordSha256))).Set("acceptanceRevision", wire.String(string(binding.AcceptanceRevision))))
+	}
+	return wire.ObjectValue(wire.NewObject().Set("repositoryIdentity", wire.String(candidate.RepositoryIdentity)).Set("headCommit", wire.String(candidate.HeadCommit)).Set("headTree", wire.String(candidate.HeadTree)).Set("sourceSha256", wire.String(string(candidate.SourceSha256))).Set("definitionSha256", wire.String(string(candidate.DefinitionSha256))).Set("policySha256", wire.String(string(candidate.PolicySha256))).Set("tickets", wire.Array(tickets...)).Set("predecessors", predecessorBindingValues(candidate.Predecessors)))
+}
+
+func promotionValue(promotion *release.Promotion) wire.Value {
+	digests := make([]string, len(promotion.AttestationSha256s))
+	for i, digest := range promotion.AttestationSha256s {
+		digests[i] = string(digest)
+	}
+	return wire.ObjectValue(wire.NewObject().Set("candidateSha256", wire.String(string(promotion.CandidateSha256))).Set("attestationSha256s", wire.Strings(digests)).Set("predecessors", predecessorBindingValues(promotion.Predecessors)).Set("actor", wire.String(promotion.Actor)).Set("recordedAt", wire.String(string(promotion.RecordedAt))))
 }
