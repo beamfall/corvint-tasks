@@ -2,14 +2,14 @@
   "baseRevision": "e891d99b30b5ff9246f96ffaed40efd750a640f8",
   "evidence": [
     {
-      "blobOid": "18ec6f24cc6894939afd9009b6e4a404c890e6be",
-      "id": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
-      "path": "docs/decisions/0009-fixture-release-control.md",
+      "blobOid": "8e25f9eb33102e547becb2247dc51da346b8c380",
+      "id": "evidence:sha256:7b0cf5feb212982414a27886f3d2df71793debdd95f032fb83b1da8dd929979c",
+      "path": "docs/SPEC.md",
       "span": {
-        "end": 848,
-        "start": 81
+        "end": 219668,
+        "start": 218516
       },
-      "spanSha256": "a6dea720601719e093b861c9d6929b7c09cb13e22a27810ad83478e9cf039851"
+      "spanSha256": "aaec0d197f2f1c699f21af6b208350fa4a01ec7b4b848d5fbd61f3684fe54b5e"
     },
     {
       "blobOid": "f224b6e5c3fe0e6ab73aa29b9cced338d9a097a5",
@@ -27,15 +27,35 @@
     {
       "basis": [
         {
-          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
-          "relation": "decision"
+          "evidenceId": "evidence:sha256:7b0cf5feb212982414a27886f3d2df71793debdd95f032fb83b1da8dd929979c",
+          "relation": "specification"
         }
       ],
       "disposition": "supported",
-      "id": "hunk:sha256:6901843275f77a33982646ac6c8fa438fb875fbacaba33bcd85a106fce3b6b0e",
+      "id": "hunk:sha256:f6ee1ad5e8fef921dd148d766045815ff6b5fc47913e68eeb02a34eb79009d97",
+      "newRange": {
+        "count": 12,
+        "start": 1149
+      },
+      "oldRange": {
+        "count": 6,
+        "start": 1149
+      },
+      "path": "docs/SPEC.md",
+      "reason": "evidence-backed"
+    },
+    {
+      "basis": [
+        {
+          "evidenceId": "evidence:sha256:7b0cf5feb212982414a27886f3d2df71793debdd95f032fb83b1da8dd929979c",
+          "relation": "specification"
+        }
+      ],
+      "disposition": "supported",
+      "id": "hunk:sha256:e0dd20534826de464dd9cb2beb1d710c36ca2bdd04863de8552aa754f81a68dc",
       "newRange": {
         "count": 6,
-        "start": 2582
+        "start": 2588
       },
       "oldRange": {
         "count": 4,
@@ -47,19 +67,19 @@
     {
       "basis": [
         {
-          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
-          "relation": "decision"
+          "evidenceId": "evidence:sha256:7b0cf5feb212982414a27886f3d2df71793debdd95f032fb83b1da8dd929979c",
+          "relation": "specification"
         }
       ],
       "disposition": "supported",
-      "id": "hunk:sha256:5a25cf14ac8909bf8ac4bd4d348e13d8a6410bcbeb85f449911c9c5e9a390407",
+      "id": "hunk:sha256:3207a6d077fec68e7e01c81631fbb6dc3bb76a55aefb837451f085baf48df37d",
       "newRange": {
-        "count": 5,
-        "start": 6
+        "count": 21,
+        "start": 3
       },
       "oldRange": {
-        "count": 3,
-        "start": 6
+        "count": 6,
+        "start": 3
       },
       "path": "docs/decisions/0009-fixture-release-control.md",
       "reason": "evidence-backed"
@@ -67,8 +87,8 @@
     {
       "basis": [
         {
-          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
-          "relation": "decision"
+          "evidenceId": "evidence:sha256:7b0cf5feb212982414a27886f3d2df71793debdd95f032fb83b1da8dd929979c",
+          "relation": "specification"
         }
       ],
       "disposition": "supported",
@@ -107,8 +127,8 @@
     {
       "basis": [
         {
-          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
-          "relation": "decision"
+          "evidenceId": "evidence:sha256:7b0cf5feb212982414a27886f3d2df71793debdd95f032fb83b1da8dd929979c",
+          "relation": "specification"
         }
       ],
       "disposition": "supported",
@@ -127,8 +147,8 @@
     {
       "basis": [
         {
-          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
-          "relation": "decision"
+          "evidenceId": "evidence:sha256:7b0cf5feb212982414a27886f3d2df71793debdd95f032fb83b1da8dd929979c",
+          "relation": "specification"
         }
       ],
       "disposition": "supported",
@@ -147,8 +167,8 @@
     {
       "basis": [
         {
-          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
-          "relation": "decision"
+          "evidenceId": "evidence:sha256:7b0cf5feb212982414a27886f3d2df71793debdd95f032fb83b1da8dd929979c",
+          "relation": "specification"
         }
       ],
       "disposition": "supported",
@@ -167,8 +187,8 @@
     {
       "basis": [
         {
-          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
-          "relation": "decision"
+          "evidenceId": "evidence:sha256:7b0cf5feb212982414a27886f3d2df71793debdd95f032fb83b1da8dd929979c",
+          "relation": "specification"
         }
       ],
       "disposition": "supported",
@@ -185,6 +205,6 @@
       "reason": "evidence-backed"
     }
   ],
-  "patchSha256": "b08650928930727a3b9e2faa895a7b210328ca65622aa38c24e4e8a2c2220d3d",
+  "patchSha256": "b6726df4d7538b5efedc713f8e1b4cc60e67acc25e25ae680e4960cd34bf348b",
   "spec": "cem/0.2"
 }
