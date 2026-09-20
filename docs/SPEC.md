@@ -2576,6 +2576,8 @@ The table maps obligations to slices and acceptance scenarios. Executed support/
 
 ### TM-V0-028 — fixture release control
 
+Candidate ticket and predecessor bindings are semantic arrays in their release definition's ID order; promotion predecessor bindings retain the candidate order. Whole-object digest-byte sorting does not apply to these arrays. Their IDs must exactly match the sorted, unique definition, so duplicate, missing, extra, or reordered bindings remain malformed.
+
 `taskman-release/0` records live at `.taskman/releases/<release-id>.json` under the release-count and file-byte limits. Definitions name ordered predecessors, scoped tickets, acceptance criteria, and required policy gates. Candidate capture, attestations, readiness, and promotion follow decision 0009. Required gates are derived from the current policy's required gates union the release's explicit gates; every release criterion must be covered by passing, compatible current-candidate evidence. Readiness is `BLOCKED`, `UNKNOWN`, or `READY_ATTESTED`. External/manual evidence is non-native, and native gate execution is `NOT_RUN`. Release mutation is fixture-only and journaled; promotion is local and grants no publication or real-queue authority.
 
 Definitions reject unknown required gate IDs before commit. Attestations must supply the current candidate digest; the writer never rebinds stale evidence. Promotion binds only passing, compatible evidence for that candidate. Release CLI payloads accept insignificant JSON whitespace (including stdin) and derive authorization from parsed provenance. Source identity includes file mode and type plus file contents or symlink target. Every writer carries the complete canonical ticket and release inventory.

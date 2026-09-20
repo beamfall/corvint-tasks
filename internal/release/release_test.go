@@ -3,6 +3,7 @@ package release
 import (
 	"bytes"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/Beamfall/corvint-tasks/internal/ticket"
@@ -10,6 +11,45 @@ import (
 )
 
 func digest(s string) wire.Digest { return wire.Sum([]byte(s)) }
+
+func TestTMV0028_AS38_BindingArraysFollowDefinitionOrder(t *testing.T) {
+	first, second := "ticket:acme:main:AT-0001", "ticket:acme:main:AT-0002"
+	hi, lo := wire.Digest(strings.Repeat("f", 64)), wire.Digest(strings.Repeat("0", 64))
+	r := &Record{QueueID: wire.QueueID{Raw: "queue:acme:main"}, ReleaseID: "v1", Revision: "1", Version: "v1", Title: "Release", TicketIDs: []wire.TicketID{{Raw: first}, {Raw: second}}, PredecessorIDs: []string{"a", "b"}, AcceptanceCriteria: []string{"criterion"}}
+	r.Candidate = candidateFor(r, digest("policy"), first, hi, 1, []PredecessorBinding{{ReleaseID: "a", PromotionSha256: hi}, {ReleaseID: "b", PromotionSha256: lo}})
+	r.Candidate.Tickets = append(r.Candidate.Tickets, TicketBinding{TicketID: wire.TicketID{Raw: second}, RecordSha256: lo, AcceptanceRevision: "1"})
+	a := Attestation{AttestationID: "pass", CandidateSha256: CandidateDigest(r.Candidate), GateID: "manual", Provenance: Manual, Actor: "owner", RecordedAt: "2026-09-20T00:00:00Z", Result: "PASS", Criteria: []wire.Count{"0"}, Evidence: []wire.Digest{digest("evidence")}, SourceIdentity: "owner"}
+	r.Attestations = []Attestation{a}
+	r.Promotion = &Promotion{CandidateSha256: a.CandidateSha256, AttestationSha256s: []wire.Digest{AttestationDigest(a)}, Predecessors: append([]PredecessorBinding(nil), r.Candidate.Predecessors...), Actor: "owner", RecordedAt: a.RecordedAt}
+	raw := Encode(r)
+	decoded, err := Decode(raw)
+	if err != nil || !bytes.Equal(Encode(decoded), raw) {
+		t.Fatalf("ordered round trip: %v", err)
+	}
+	for _, kind := range []string{"duplicate-ticket", "reordered-ticket", "duplicate-predecessor", "reordered-predecessor", "duplicate-promotion-predecessor"} {
+		t.Run(kind, func(t *testing.T) {
+			copy, err := Decode(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch kind {
+			case "duplicate-ticket":
+				copy.Candidate.Tickets[1] = copy.Candidate.Tickets[0]
+			case "reordered-ticket":
+				copy.Candidate.Tickets[0], copy.Candidate.Tickets[1] = copy.Candidate.Tickets[1], copy.Candidate.Tickets[0]
+			case "duplicate-predecessor":
+				copy.Candidate.Predecessors[1] = copy.Candidate.Predecessors[0]
+			case "reordered-predecessor":
+				copy.Candidate.Predecessors[0], copy.Candidate.Predecessors[1] = copy.Candidate.Predecessors[1], copy.Candidate.Predecessors[0]
+			case "duplicate-promotion-predecessor":
+				copy.Promotion.Predecessors[1] = copy.Promotion.Predecessors[0]
+			}
+			if _, err := Decode(Encode(copy)); err == nil {
+				t.Fatal("malformed binding accepted")
+			}
+		})
+	}
+}
 
 func TestTMV0028_AS38_PromotionBindsOnlyCompatiblePassingEvidence(t *testing.T) {
 	id := "ticket:acme:main:AT-0001"

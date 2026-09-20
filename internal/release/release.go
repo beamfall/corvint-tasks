@@ -134,11 +134,11 @@ func decodeCandidate(r *wire.Reader) *Candidate {
 	c.SourceSha256 = r.Field("sourceSha256").Digest()
 	c.DefinitionSha256 = r.Field("definitionSha256").Digest()
 	c.PolicySha256 = r.Field("policySha256").Digest()
-	for _, q := range r.Field("tickets").Array(wire.MaxTicketsPerQueue, false) {
+	for _, q := range r.Field("tickets").Array(wire.MaxTicketsPerQueue, true) {
 		q.Closed("ticketId", "recordSha256", "acceptanceRevision")
 		c.Tickets = append(c.Tickets, TicketBinding{q.Field("ticketId").TicketID(), q.Field("recordSha256").Digest(), q.Field("acceptanceRevision").Count()})
 	}
-	for _, q := range r.Field("predecessors").Array(wire.MaxReleasesPerQueue, false) {
+	for _, q := range r.Field("predecessors").Array(wire.MaxReleasesPerQueue, true) {
 		c.Predecessors = append(c.Predecessors, decodePredecessor(q))
 	}
 	return c
@@ -170,7 +170,7 @@ func decodePromotion(r *wire.Reader) *Promotion {
 	for _, q := range r.Field("attestationSha256s").Array(wire.MaxJSONArrayElements, false) {
 		p.AttestationSha256s = append(p.AttestationSha256s, q.Digest())
 	}
-	for _, q := range r.Field("predecessors").Array(wire.MaxReleasesPerQueue, false) {
+	for _, q := range r.Field("predecessors").Array(wire.MaxReleasesPerQueue, true) {
 		p.Predecessors = append(p.Predecessors, decodePredecessor(q))
 	}
 	return p

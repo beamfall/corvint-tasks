@@ -21,6 +21,61 @@ func releaseCreatePayload(version, title, ticketID, predecessor string) string {
 	return fmt.Sprintf(`{"acceptanceCriteria":["release criterion"],"predecessorReleaseIds":%s,"requiredGates":[],"ticketIds":[%q],"title":%q,"version":%q}`, preds, ticketID, title, version)
 }
 
+func TestTMV0028_AS38_DurableMultiTicketCandidateDefinitionOrder(t *testing.T) {
+	r := fixture.TempRepo(t)
+	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
+	fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), fixture.PolicyBytes())
+	git(t, r.Root, "init")
+	git(t, r.Root, "config", "user.email", "fixture@example.invalid")
+	git(t, r.Root, "config", "user.name", "Fixture")
+	git(t, r.Root, "add", ".taskman")
+	git(t, r.Root, "commit", "-m", "baseline")
+	if x := atm(t, r.Root, nil, "init"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatal(x.res)
+	}
+	var first, second string
+	var highest wire.Digest
+	for i := 0; i < 32; i++ {
+		id := createTicket(t, r.Root, fmt.Sprintf("multi-ticket-%d", i))
+		raw, err := os.ReadFile(filepath.Join(r.IntentDir, "tickets", id[len(id)-7:]+".json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		d := wire.Sum(raw)
+		if first != "" && d < highest {
+			second = id
+			break
+		}
+		first, highest = id, d
+	}
+	if second == "" {
+		t.Fatal("could not construct opposite digest/ID order")
+	}
+	payload := strings.Replace(releaseCreatePayload("v1", "Release", first, ""), fmt.Sprintf(`"ticketIds":[%q]`, first), fmt.Sprintf(`"ticketIds":[%q,%q]`, first, second), 1)
+	if x := atm(t, r.Root, nil, "release", "create", "--request-id", "multi-release", "--target", "v1", "--payload", payload); x.res.Outcome != wire.OutcomeOK {
+		t.Fatal(x.res)
+	}
+	args := []string{"release", "candidate", "--request-id", "multi-candidate", "--target", "v1", "--expected-revision", "1", "--issued-at", "2026-09-20T12:00:00Z"}
+	if x := atm(t, r.Root, nil, args...); x.res.Outcome != wire.OutcomeOK {
+		t.Fatal(x.res)
+	}
+	raw, err := os.ReadFile(filepath.Join(r.IntentDir, "releases", "v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := release.Decode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindings := record.Candidate.Tickets
+	if len(bindings) != 2 || bindings[0].TicketID.Raw != first || bindings[1].TicketID.Raw != second || bindings[0].RecordSha256 <= bindings[1].RecordSha256 || string(release.Encode(record)) != string(raw) {
+		t.Fatalf("candidate order/round-trip: %+v", bindings)
+	}
+	if x := atm(t, r.Root, nil, args...); x.res.Outcome != wire.OutcomeOK || !field(x.res.Items[0], "replayed").Bool {
+		t.Fatal(x.res)
+	}
+}
+
 func TestTMV0028_AS38_ReleaseKeepJournalReconciliation(t *testing.T) {
 	r := fixture.TempRepo(t)
 	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
