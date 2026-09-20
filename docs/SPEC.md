@@ -1149,6 +1149,12 @@ Normal bytes-plus-EOF and the exact encoded cap remain valid.
   "no slowdown", "unchanged" or "negligible" claim is made. Active `corvint-tasks` on the same host is
   covered by §9.4's contention rows; process separation alone is not evidence of absent
   contention. No existing Corvint latency budget is relaxed. (owner steering; ATCP-V0-020)
+- `TM-V0-028`: Fixture queues may model ordered releases under decision 0009. The public release
+  read contract exposes the complete definition, canonical candidate, attestation and promotion
+  digests, and their bindings so compatible evidence and successor releases can be driven without
+  reading `.taskman` projections. Mutation remains fixture-only; native gate execution,
+  publication, deployment and real-queue cutover remain `NOT_RUN` and unauthorized. (owner
+  decision 0009; AS-38)
 
 ### 3.5 Remaining closed schemas
 
