@@ -1,0 +1,190 @@
+{
+  "baseRevision": "e891d99b30b5ff9246f96ffaed40efd750a640f8",
+  "evidence": [
+    {
+      "blobOid": "18ec6f24cc6894939afd9009b6e4a404c890e6be",
+      "id": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
+      "path": "docs/decisions/0009-fixture-release-control.md",
+      "span": {
+        "end": 848,
+        "start": 81
+      },
+      "spanSha256": "a6dea720601719e093b861c9d6929b7c09cb13e22a27810ad83478e9cf039851"
+    },
+    {
+      "blobOid": "f224b6e5c3fe0e6ab73aa29b9cced338d9a097a5",
+      "id": "evidence:sha256:b5b03581b9a6de20a65498701d5a90f543d0b597cc4a5112916f5b3859bb06f2",
+      "path": "examples/corvint-1.0-releases.md",
+      "span": {
+        "end": 400,
+        "start": 37
+      },
+      "spanSha256": "8eca28e91a5c4eb901ae00c9ace354efb3e63b01d9327655326b76d54a5a5009"
+    }
+  ],
+  "excludedPath": ".corvint/change.cem.json",
+  "hunks": [
+    {
+      "basis": [
+        {
+          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
+          "relation": "decision"
+        }
+      ],
+      "disposition": "supported",
+      "id": "hunk:sha256:6901843275f77a33982646ac6c8fa438fb875fbacaba33bcd85a106fce3b6b0e",
+      "newRange": {
+        "count": 6,
+        "start": 2582
+      },
+      "oldRange": {
+        "count": 4,
+        "start": 2582
+      },
+      "path": "docs/SPEC.md",
+      "reason": "evidence-backed"
+    },
+    {
+      "basis": [
+        {
+          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
+          "relation": "decision"
+        }
+      ],
+      "disposition": "supported",
+      "id": "hunk:sha256:5a25cf14ac8909bf8ac4bd4d348e13d8a6410bcbeb85f449911c9c5e9a390407",
+      "newRange": {
+        "count": 5,
+        "start": 6
+      },
+      "oldRange": {
+        "count": 3,
+        "start": 6
+      },
+      "path": "docs/decisions/0009-fixture-release-control.md",
+      "reason": "evidence-backed"
+    },
+    {
+      "basis": [
+        {
+          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
+          "relation": "decision"
+        }
+      ],
+      "disposition": "supported",
+      "id": "hunk:sha256:f44d3c87317208ba8f64a00c81ed4c06c3b5bc7fd897dbd9453072f29d8f59cf",
+      "newRange": {
+        "count": 40,
+        "start": 3
+      },
+      "oldRange": {
+        "count": 3,
+        "start": 3
+      },
+      "path": "examples/corvint-1.0-releases.md",
+      "reason": "evidence-backed"
+    },
+    {
+      "basis": [
+        {
+          "evidenceId": "evidence:sha256:b5b03581b9a6de20a65498701d5a90f543d0b597cc4a5112916f5b3859bb06f2",
+          "relation": "specification"
+        }
+      ],
+      "disposition": "supported",
+      "id": "hunk:sha256:90d1833ae81ff9d1e37b198d1898c498707bd898cbc6e91f9d7d15873dd9ddf2",
+      "newRange": {
+        "count": 1,
+        "start": 1
+      },
+      "oldRange": {
+        "count": 1,
+        "start": 1
+      },
+      "path": "examples/fixture/release-2.json",
+      "reason": "evidence-backed"
+    },
+    {
+      "basis": [
+        {
+          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
+          "relation": "decision"
+        }
+      ],
+      "disposition": "supported",
+      "id": "hunk:sha256:63830b3b976774e059228bcc5fc8307cf224b304a225b9dba5b480a9fd70ae69",
+      "newRange": {
+        "count": 7,
+        "start": 128
+      },
+      "oldRange": {
+        "count": 7,
+        "start": 128
+      },
+      "path": "internal/cli/release.go",
+      "reason": "evidence-backed"
+    },
+    {
+      "basis": [
+        {
+          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
+          "relation": "decision"
+        }
+      ],
+      "disposition": "supported",
+      "id": "hunk:sha256:d6665f1be0079a124c6c25f92df8e1336a46bf3abc7c93f3b2836319741a06d3",
+      "newRange": {
+        "count": 7,
+        "start": 151
+      },
+      "oldRange": {
+        "count": 7,
+        "start": 151
+      },
+      "path": "internal/cli/release.go",
+      "reason": "evidence-backed"
+    },
+    {
+      "basis": [
+        {
+          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
+          "relation": "decision"
+        }
+      ],
+      "disposition": "supported",
+      "id": "hunk:sha256:fed468da4c60e02385271f930d9db2cd2e9edc61bc3e56f29ada97d2dfa707ac",
+      "newRange": {
+        "count": 60,
+        "start": 159
+      },
+      "oldRange": {
+        "count": 3,
+        "start": 159
+      },
+      "path": "internal/cli/release.go",
+      "reason": "evidence-backed"
+    },
+    {
+      "basis": [
+        {
+          "evidenceId": "evidence:sha256:c314336b679286a3a6abae0e260427114aa53baa3fa7970e36fffdfc5427bb66",
+          "relation": "decision"
+        }
+      ],
+      "disposition": "supported",
+      "id": "hunk:sha256:8dae7cea6b28f4ea3b7b738fb1933cc2802006072f0364e4aea8e6c51e0df15e",
+      "newRange": {
+        "count": 135,
+        "start": 132
+      },
+      "oldRange": {
+        "count": 6,
+        "start": 132
+      },
+      "path": "internal/cli/release_test.go",
+      "reason": "evidence-backed"
+    }
+  ],
+  "patchSha256": "5264a138c576a49dc6e00faf21e896fe6cf764147d358fd176655dee72a6811d",
+  "spec": "cem/0.2"
+}
