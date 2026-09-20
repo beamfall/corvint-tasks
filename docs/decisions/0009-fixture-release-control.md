@@ -5,8 +5,8 @@
 
 ## Requirements
 
-- `TM-V0-029` (implements `TM-V0-028`): Corvint Tasks may durably model ordered releases in
-  fixture queues. A candidate binds its release definition, explicit ticket records and acceptance
+- `TM-V0-029`: Implements `TM-V0-028`. Corvint Tasks may durably model ordered releases in fixture
+  queues. A candidate binds its release definition, explicit ticket records and acceptance
   revisions, predecessor promotions, current policy, observed Git `HEAD` and tree, and a digest of repository content
   excluding `.taskman`.
 
