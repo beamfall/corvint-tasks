@@ -4,10 +4,10 @@ Create `v0-9`, then create `v1-0` with `v0-9` as its predecessor. Each release s
 
 `release readiness` reports `BLOCKED`, `UNKNOWN`, or `READY_ATTESTED`. `.taskman` journal/projection writes do not change the captured source identity; any other tracked or untracked source change invalidates it. `release promote` records local readiness only. Native gate execution, tagging, publication, deployment, and real-queue cutover remain `NOT_RUN`.
 
-The following sequence assumes an initialized disposable fixture, two newly created ticket IDs in `TICKET_09` and `TICKET_10`, and `jq`. It obtains every workflow revision and binding digest from command output; it never reads `.taskman` projections. Keep generated evidence outside the repository.
+The following sequence assumes an initialized disposable fixture with a committed `HEAD`, a clean source worktree outside `.taskman`, two newly created ticket IDs in `TICKET_09` and `TICKET_10`, and `jq`. It obtains every workflow revision and binding digest from command output; it never reads `.taskman` projections. Keep the executable and generated evidence outside the fixture repository so candidate capture remains valid.
 
 ```sh
-ATM=./corvint-tasks
+ATM=/private/tmp/corvint-tasks
 EVIDENCE=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 $ATM release create --request-id create-v0-9 --target v0-9 --payload \
