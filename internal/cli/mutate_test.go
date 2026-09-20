@@ -77,6 +77,9 @@ func TestTMV0006_AS03_TicketCreateRetryReplays(t *testing.T) {
 	if again.res.Outcome != wire.OutcomeOK {
 		t.Fatalf("retry: %+v", again.res)
 	}
+	if field(first.res.Items[0], "ticketId").Str != field(again.res.Items[0], "ticketId").Str {
+		t.Fatal("replay lost allocated ticket identity")
+	}
 	if !field(again.res.Items[0], "replayed").Bool {
 		t.Error("an identical retry was not replayed")
 	}

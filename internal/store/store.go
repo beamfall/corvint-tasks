@@ -54,7 +54,8 @@ type Report struct {
 	// Ticket is the ticket a committed mutation wrote, read back from the
 	// receipt rather than from the request: a CREATE that allocated a serial
 	// learns its own id here and nowhere else.
-	Ticket string
+	Ticket  string
+	Release string
 }
 
 // target maps one plan artifact onto the publication destination its path
@@ -91,8 +92,12 @@ func postTarget(path string) (authority.Target, error) {
 		return authority.Target{Role: authority.RoleImportMap, Name: "import-map.json"}, nil
 	case strings.HasPrefix(path, "intent/tickets/"):
 		return authority.Target{Role: authority.RoleTicket, Name: strings.TrimPrefix(path, "intent/tickets/")}, nil
+	case strings.HasPrefix(path, "intent/releases/"):
+		return authority.Target{Role: authority.RoleRelease, Name: strings.TrimPrefix(path, "intent/releases/")}, nil
 	case strings.HasPrefix(path, "pinned/"):
 		return authority.Target{Role: authority.RolePin, Name: strings.TrimPrefix(path, "pinned/")}, nil
+	case strings.HasPrefix(path, "evidence/"):
+		return authority.Target{Role: authority.RoleEvidence, Name: strings.TrimPrefix(path, "evidence/")}, nil
 	case strings.HasPrefix(path, "requests/"):
 		name := path[strings.LastIndex(path, "/")+1:]
 		return authority.Target{Role: authority.RoleRequest, Name: name}, nil
@@ -172,7 +177,7 @@ func mutable(t authority.Target) bool {
 	switch t.Role {
 	case authority.RoleHead, authority.RoleBarrier, authority.RoleReservations,
 		authority.RoleQueue, authority.RolePolicy, authority.RoleImportMap,
-		authority.RoleTicket, authority.RoleVersion:
+		authority.RoleTicket, authority.RoleRelease, authority.RoleVersion:
 		return true
 	}
 	return false
@@ -188,17 +193,31 @@ func mutable(t authority.Target) bool {
 // with unwritten projections (which redo completes) but never a projection
 // or a head with no receipt.
 func apply(repo *intent.Repository, session *authority.Session, plan *transaction.Plan) (receipt string, err error) {
+	return applyBeforeCommit(repo, session, plan, nil)
+}
+
+func applyBeforeCommit(repo *intent.Repository, session *authority.Session, plan *transaction.Plan, beforeCommit func() error) (receipt string, err error) {
+	return applyWithFaults(repo, session, plan, beforeCommit, nil)
+}
+
+func applyWithFaults(repo *intent.Repository, session *authority.Session, plan *transaction.Plan, beforeCommit, beforeBarrierDelete func() error) (receipt string, err error) {
 	arts := plan.Artifacts()
-	pre, err := preDigests(plan)
+	record, err := snapshot.DecodeReceipt(plan.Receipt())
 	if err != nil {
 		return "", err
 	}
+	pre := preDigests(record)
 	order := map[string]int{"EVIDENCE": 0, "RECEIPT": 1, "POST": 2, "HEAD": 3}
 	staged := make([][]transaction.Artifact, 4)
 	for _, a := range arts {
 		phase, ok := order[a.Role]
 		if !ok {
 			return "", wire.Errorf(wire.CodeMalformed, a.Target, "unknown artifact role %q", a.Role)
+		}
+		// KEEP_JOURNAL retains discarded bytes as a blob-backed evidence POST.
+		// Its bytes must exist before the receipt refers to them (§5.2/§5.5).
+		if a.Role == "POST" && strings.HasPrefix(a.Target, "evidence/") {
+			phase = 0
 		}
 		staged[phase] = append(staged[phase], a)
 	}
@@ -218,8 +237,13 @@ func apply(repo *intent.Repository, session *authority.Session, plan *transactio
 			}
 		}
 	}()
-	for _, phase := range staged {
+	for phaseIndex, phase := range staged {
 		for _, a := range phase {
+			if a.Role == "RECEIPT" && beforeCommit != nil {
+				if err := beforeCommit(); err != nil {
+					return receipt, err
+				}
+			}
 			t, err := target(a.Role, a.Target)
 			if err != nil {
 				return receipt, err
@@ -261,8 +285,29 @@ func apply(repo *intent.Repository, session *authority.Session, plan *transactio
 				receipt = t.Name
 			}
 		}
+		if phaseIndex == 2 {
+			if err := removeBarrierPost(session, record, pre, beforeBarrierDelete); err != nil {
+				return receipt, err
+			}
+		}
 	}
 	return receipt, nil
+}
+
+func removeBarrierPost(session *authority.Session, record *snapshot.Receipt, pre map[string]*wire.Digest, beforeDelete func() error) error {
+	for _, post := range record.Post {
+		if post.Sha256 != nil {
+			continue
+		}
+		// DecodeReceipt admits only the paired UNPAUSE barrier deletion.
+		if beforeDelete != nil {
+			if err := beforeDelete(); err != nil {
+				return err
+			}
+		}
+		return session.RemoveBarrier(*pre[post.Path])
+	}
+	return nil
 }
 
 // parentOf names the directory a target needs, as the session key and the
@@ -275,7 +320,9 @@ func parentOf(t authority.Target) (key, dir string) {
 		shard := "requests/" + t.Name[:2]
 		return shard, shard
 	case authority.RoleTicket:
-		return "tickets", ""
+		return "tickets", "intent/tickets"
+	case authority.RoleRelease:
+		return "releases", "intent/releases"
 	}
 	return "", ""
 }
@@ -284,8 +331,8 @@ func parentOf(t authority.Target) (key, dir string) {
 // created by whichever transaction first publishes into it, so a later
 // transaction and a redo both find it present.
 func ensureDir(repo *intent.Repository, session *authority.Session, key, dir string) error {
-	full := filepath.Join(repo.PrimaryWorktree, intent.Dir, intent.TicketsDir)
-	if dir != "" {
+	full := filepath.Join(repo.PrimaryWorktree, intent.Dir, strings.TrimPrefix(dir, "intent/"))
+	if !strings.HasPrefix(dir, "intent/") {
 		full = filepath.Join(repo.StateDir, dir)
 	}
 	if _, err := os.Stat(full); err == nil {
@@ -357,16 +404,12 @@ func publish(session *authority.Session, stage *authority.Stage, t authority.Tar
 // preDigests reads the state each post destination is expected to hold before
 // this transaction, as the receipt itself records it. A null pre digest means
 // the receipt expects no file there.
-func preDigests(plan *transaction.Plan) (map[string]*wire.Digest, error) {
-	receipt, err := snapshot.DecodeReceipt(plan.Receipt())
-	if err != nil {
-		return nil, err
-	}
+func preDigests(receipt *snapshot.Receipt) map[string]*wire.Digest {
 	out := make(map[string]*wire.Digest, len(receipt.Pre))
 	for _, entry := range receipt.Pre {
 		out[entry.Path] = entry.Sha256
 	}
-	return out, nil
+	return out
 }
 
 func slotName(i int) string {
@@ -394,41 +437,38 @@ func Init(ctx context.Context, repo *intent.Repository, actor mutation.Binding, 
 		report.Kind = "Refused"
 		return report, nil
 	} else if !errors.Is(err, fs.ErrNotExist) {
-		return report, err
+		return guardFailure(report, requestID, err)
 	}
 	if _, err := authority.Qualify(repo.CommonDir); err != nil {
-		return report, err
-	}
-	queue, policy, queueID, branch, err := readIntent(repo)
-	if err != nil {
-		return report, err
+		return guardFailure(report, requestID, err)
 	}
 	lock, err := authority.AcquireLock(ctx, repo, authority.LockOptions{})
 	if err != nil {
-		return report, err
+		return guardFailure(report, requestID, err)
 	}
 	defer lock.Close()
 
 	session, err := authority.NewSession(repo, lock)
 	if err != nil {
-		return report, err
+		return guardFailure(report, requestID, err)
 	}
 	defer session.Close()
 
-	if err = session.Mkdir("state"); err != nil {
-		return report, err
+	// The lock serializes concurrent initializers; refusal precedes state creation.
+	if _, err := os.Lstat(repo.StateDir); err == nil {
+		report.Kind = "Refused"
+		report.Outcome = mutation.Outcome{RequestID: requestID, Outcome: mutation.OutcomeBlocked}
+		return report, nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return guardFailure(report, requestID, err)
 	}
-	report.Directories = append(report.Directories, "taskman")
-	for _, d := range genesisDirectories {
-		if err = session.Mkdir(d); err != nil {
-			return report, err
-		}
-		report.Directories = append(report.Directories, d)
+	queue, policy, queueID, branch, err := readIntent(repo)
+	if err != nil {
+		return guardFailure(report, requestID, err)
 	}
-
 	inventory, err := transaction.NewInventory(nil, genesisDirectories)
 	if err != nil {
-		return report, err
+		return guardFailure(report, requestID, err)
 	}
 	result := transaction.Model(
 		transaction.Request{
@@ -455,9 +495,27 @@ func Init(ctx context.Context, repo *intent.Repository, actor mutation.Binding, 
 	if result.Kind != "Transaction" || result.Plan == nil {
 		return report, nil
 	}
+	currentQueue, currentPolicy, _, currentBranch, err := readIntent(repo)
+	if err != nil {
+		return guardFailure(report, requestID, err)
+	}
+	if wire.Sum(queue) != wire.Sum(currentQueue) || wire.Sum(policy) != wire.Sum(currentPolicy) || branch != currentBranch {
+		return report, wire.Errorf(wire.CodeSnapshotMoved, "intent", "initialization inputs changed")
+	}
+	if err = session.Mkdir("state"); err != nil {
+		return guardFailure(report, requestID, err)
+	}
+	report.Directories = append(report.Directories, "taskman")
+	for _, d := range genesisDirectories {
+		if err = session.Mkdir(d); err != nil {
+			return guardFailure(report, requestID, err)
+		}
+		report.Directories = append(report.Directories, d)
+	}
+
 	report.Receipt, err = apply(repo, session, result.Plan)
 	if err != nil {
-		return report, err
+		return guardFailure(report, requestID, err)
 	}
 	return report, nil
 }
@@ -483,5 +541,6 @@ func readIntent(repo *intent.Repository) (queue, policy []byte, queueID, branch 
 	if _, err = intent.DecodePolicy(policy); err != nil {
 		return nil, nil, "", "", err
 	}
-	return queue, policy, q.QueueID.Raw, q.IntentBranch, nil
+	branch, err = primaryBranch(repo)
+	return queue, policy, q.QueueID.Raw, branch, err
 }

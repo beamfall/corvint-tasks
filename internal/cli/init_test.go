@@ -124,3 +124,20 @@ func TestTMV0008_AS11_InitMakesTheStoreReadable(t *testing.T) {
 		t.Errorf("a second init must refuse, got %+v", again.res)
 	}
 }
+
+func TestTMV0009_AS11_InvalidInitRoleThenRetry(t *testing.T) {
+	r := fixture.TempRepo(t)
+	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
+	fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), fixture.PolicyBytes())
+	bad := atm(t, r.Root, nil, "init", "--role", "INVALID")
+	if bad.res.Outcome == wire.OutcomeOK {
+		t.Fatal("invalid role succeeded")
+	}
+	if _, err := os.Lstat(r.StateDir); !os.IsNotExist(err) {
+		t.Fatalf("invalid role stranded state: %v", err)
+	}
+	good := atm(t, r.Root, nil, "init", "--role", "OWNER")
+	if good.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("corrected retry: %+v", good.res)
+	}
+}

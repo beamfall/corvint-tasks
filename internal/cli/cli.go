@@ -42,22 +42,23 @@ type Env struct {
 // `ticket` mutations write: they commit through the §5.2 journal writer.
 var ReadVerbs = []string{
 	"help", "version", "ticket list", "ticket search", "ticket show", "ticket blockers", "ticket export",
-	"queue status", "roadmap", "gate list", "gate show", "archive export", "archive verify",
-	"init",
+	"queue status", "roadmap", "gate list", "gate show", "archive export", "archive verify", "receipt audit", "reconcile inspect", "reconcile intent",
+	"init", "pause", "unpause",
 	"ticket create", "ticket refine", "ticket prioritize", "ticket set-dependencies",
 	"ticket set-gates", "ticket set-effects", "ticket hold", "ticket release-hold", "ticket reopen",
 	"ticket archive", "ticket restore", "ticket complete-manual", "ticket grant-approval",
 	"ticket revoke-approval",
+	"release create", "release update", "release candidate", "release record-gate", "release promote", "release list", "release show", "release readiness",
 }
 
 // OmittedVerbs are the verb paths the SPEC names that this binary does not
 // implement; each answers NOT_RUN. The remaining administrative verbs arrive
 // with the rest of TCP-02;
-// `config show`, `plan preview`, `receipt show|audit|replay` and `attempt
-// show` need pinned, plan or journal data no TCP-01 reader can observe.
+// `config show`, `plan preview`, `receipt show|replay` and `attempt
+// show` remain unimplemented; receipt audit exposes the native journal reader.
 var OmittedVerbs = []string{
-	"admit", "cancel", "retry", "resume", "reconcile", "pause", "unpause", "drain",
-	"cutover", "import", "lane-leader", "config", "plan", "receipt", "attempt",
+	"admit", "cancel", "retry", "resume", "drain",
+	"cutover", "import", "lane-leader", "config", "plan", "receipt show", "receipt replay", "attempt",
 	"archive restore",
 }
 
@@ -103,6 +104,13 @@ func Run(env Env) int {
 			return emit(env.Stdout, notRun([]string{"ticket", args[1]}))
 		}
 		return emit(env.Stdout, usage([]string{"ticket"}, "unknown ticket verb"))
+	case "release":
+		if len(args) < 2 {
+			return emit(env.Stdout, usage([]string{"release"}, "release needs a verb"))
+		}
+		return emit(env.Stdout, releaseCommand(env, args[1], args[2:]))
+	case "pause", "unpause":
+		return emit(env.Stdout, barrierCommand(env, args[0], args[1:]))
 	case "init":
 		return emit(env.Stdout, initCommand(env, args[1:]))
 	case "queue":
@@ -123,6 +131,29 @@ func Run(env Env) int {
 			return emit(env.Stdout, gateShow(env, args[2:]))
 		}
 		return emit(env.Stdout, usage([]string{"gate"}, "unknown gate verb"))
+
+	case "reconcile":
+		if len(args) < 2 {
+			return emit(env.Stdout, usage([]string{"reconcile"}, "reconcile needs inspect <ticketId> or intent with an explicit choice"))
+		}
+		switch args[1] {
+		case "inspect":
+			return emit(env.Stdout, reconcileInspect(env, args[2:]))
+		case "intent":
+			return emit(env.Stdout, reconcileIntent(env, args[2:]))
+		}
+		return emit(env.Stdout, usage([]string{"reconcile"}, "unknown reconcile verb"))
+	case "receipt":
+		if len(args) < 2 {
+			return emit(env.Stdout, usage([]string{"receipt"}, "receipt needs a verb: audit, show <seq>, replay <seq>"))
+		}
+		switch args[1] {
+		case "audit":
+			return emit(env.Stdout, receiptAudit(env, args[2:]))
+		case "show", "replay":
+			return emit(env.Stdout, notRun([]string{"receipt", args[1]}))
+		}
+		return emit(env.Stdout, usage([]string{"receipt"}, "unknown receipt verb"))
 	case "archive":
 		if len(args) < 2 {
 			return emit(env.Stdout, usage([]string{"archive"}, "archive needs a verb: export [--staging DIR], verify [FILE]"))
@@ -214,6 +245,8 @@ func helpResult() *wire.Result {
 		"corvint-tasks archive verify [FILE|-]           (stdin when absent)",
 		"corvint-tasks init [--role ROLE] [--request-id ID]",
 		"corvint-tasks ticket <mutation> --request-id ID (--payload JSON | --payload-stdin) [--target TICKET --expected-revision N] [--issued-at TS] [--role ROLE]",
+		"corvint-tasks release create|update|candidate|record-gate|promote --request-id ID --target RELEASE [--expected-revision N] [--payload JSON] [--role ROLE]",
+		"corvint-tasks release list|show RELEASE|readiness RELEASE",
 		"corvint-tasks version",
 	}))
 	o.Set("note", wire.String("every read takes no lock and writes nothing, and reports journal facts it cannot observe as NOT_OBSERVED; `init` and the fourteen `ticket` mutations commit through the §5.2 writer (TCP-02/TCP-02b); the administrative verbs answer NOT_RUN"))

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Beamfall/corvint-tasks/internal/release"
 	"github.com/Beamfall/corvint-tasks/internal/safeopen"
 	"github.com/Beamfall/corvint-tasks/internal/ticket"
 	"github.com/Beamfall/corvint-tasks/internal/wire"
@@ -21,6 +22,7 @@ const (
 	PolicyFile    = "policy.json"
 	ImportMapFile = "import-map.json"
 	TicketsDir    = "tickets"
+	ReleasesDir   = "releases"
 )
 
 // Directory enumeration bounds (§3.1 "Digest preimages", §3.5).
@@ -34,7 +36,7 @@ const (
 	// intent store root can hold: queue.json, policy.json,
 	// import-map.json and tickets/. A fifth entry, whatever its name,
 	// exceeds the bound.
-	MaxIntentRootEntries = 4
+	MaxIntentRootEntries = 5
 )
 
 // ReadDirNames enumerates an open directory in chunks of DirChunk names and
@@ -87,6 +89,7 @@ type Store struct {
 	Policy    *Policy
 	ImportMap *ImportMap // nil when absent
 	Tickets   []*ticket.Record
+	Releases  []*release.Record
 	Inventory *ticket.Inventory
 	Tree      Tree
 	// Digests of the individual files, keyed by store-relative path.
@@ -122,13 +125,31 @@ func BoundFor(path string) (int, bool) {
 		return wire.MaxImportMapBytes, true
 	}
 	if !strings.HasPrefix(path, TicketsDir+"/") {
-		return 0, false
+		if !strings.HasPrefix(path, ReleasesDir+"/") {
+			return 0, false
+		}
+		name := path[len(ReleasesDir)+1:]
+		if _, ok := releaseName(name); !ok {
+			return 0, false
+		}
+		return wire.MaxReleaseFileBytes, true
 	}
 	name := path[len(TicketsDir)+1:]
 	if _, ok := ticketLocal(name); !ok {
 		return 0, false
 	}
 	return wire.MaxTicketFileBytes, true
+}
+
+func releaseName(name string) (string, bool) {
+	if !strings.HasSuffix(name, ".json") || strings.Contains(name, "/") {
+		return "", false
+	}
+	id := strings.TrimSuffix(name, ".json")
+	if _, err := wire.ParseLabel("", id); err != nil {
+		return "", false
+	}
+	return id, true
 }
 
 // ticketLocal returns the local token of a `<local>.json` ticket file name.
@@ -196,7 +217,7 @@ func TreeDigest(primaryWorktree string) (Tree, error) {
 			}
 			total += size
 			plan = append(plan, plannedFile{name, max})
-		case TicketsDir:
+		case TicketsDir, ReleasesDir:
 			info, err := root.Lstat(name)
 			if err != nil {
 				return Tree{}, wire.Errorf(wire.CodeUnsupportedFilesystem, full, "cannot stat: %v", err)
@@ -205,30 +226,40 @@ func TreeDigest(primaryWorktree string) (Tree, error) {
 				return Tree{}, wire.Errorf(wire.CodeUnsupportedFilesystem, full, "symlink inside the intent store")
 			}
 			if !info.IsDir() {
-				return Tree{}, wire.Errorf(wire.CodeMalformed, full, "tickets is not a directory")
+				return Tree{}, wire.Errorf(wire.CodeMalformed, full, "%s is not a directory", name)
 			}
-			tnames, err := listNames(root, rootPath, TicketsDir, TicketsDir+"/", wire.MaxTicketsPerQueue)
+			limit := wire.MaxTicketsPerQueue
+			bound := wire.MaxTicketFileBytes
+			if name == ReleasesDir {
+				limit = wire.MaxReleasesPerQueue
+				bound = wire.MaxReleaseFileBytes
+			}
+			tnames, err := listNames(root, rootPath, name, name+"/", limit)
 			if err != nil {
 				return Tree{}, err
 			}
 			for _, tn := range tnames {
-				rel := TicketsDir + "/" + tn
-				tfull := filepath.Join(rootPath, TicketsDir, tn)
-				if _, ok := ticketLocal(tn); !ok {
-					return Tree{}, wire.Errorf(wire.CodeMalformed, tfull, "unexpected entry in the intent store (tickets/ admits only <local>.json)")
+				rel := name + "/" + tn
+				tfull := filepath.Join(rootPath, name, tn)
+				_, ok := ticketLocal(tn)
+				if name == ReleasesDir {
+					_, ok = releaseName(tn)
 				}
-				size, err := statRegular(root, tfull, rel, wire.MaxTicketFileBytes)
+				if !ok {
+					return Tree{}, wire.Errorf(wire.CodeMalformed, tfull, "unexpected entry in the intent store (%s/ admits only named JSON records)", name)
+				}
+				size, err := statRegular(root, tfull, rel, bound)
 				if err != nil {
 					return Tree{}, err
 				}
 				total += size
-				plan = append(plan, plannedFile{rel, wire.MaxTicketFileBytes})
+				plan = append(plan, plannedFile{rel, bound})
 				if total > int64(wire.MaxIntentTreeBytes) {
 					return Tree{}, wire.Errorf(wire.CodeLimitExceeded, rootPath, "intent tree larger than %d bytes", wire.MaxIntentTreeBytes)
 				}
 			}
 		default:
-			return Tree{}, wire.Errorf(wire.CodeMalformed, full, "unexpected entry in the intent store (only queue.json, policy.json, import-map.json and tickets/ are admitted)")
+			return Tree{}, wire.Errorf(wire.CodeMalformed, full, "unexpected entry in the intent store (only queue.json, policy.json, import-map.json, tickets/ and releases/ are admitted)")
 		}
 		if total > int64(wire.MaxIntentTreeBytes) {
 			return Tree{}, wire.Errorf(wire.CodeLimitExceeded, rootPath, "intent tree larger than %d bytes", wire.MaxIntentTreeBytes)
@@ -426,6 +457,25 @@ func decodeTree(root string, tree Tree) (*Store, error) {
 	}
 	st.Tickets = records
 	st.Inventory = inv
+	for _, f := range tree.Files {
+		if !strings.HasPrefix(f.Path, ReleasesDir+"/") {
+			continue
+		}
+		rec, err := release.Decode(f.Raw)
+		if err != nil {
+			return nil, prefix(err, f.Path)
+		}
+		want := ReleasesDir + "/" + rec.ReleaseID + ".json"
+		if f.Path != want || rec.QueueID != q.QueueID {
+			return nil, wire.Errorf(wire.CodeMalformed, f.Path, "release path or queue scope mismatch")
+		}
+		for _, g := range rec.RequiredGates {
+			if !gateIDs[g] {
+				return nil, wire.Errorf(wire.CodeGateUnknown, f.Path+"/requiredGates", "gate %q is not defined in policy", g)
+			}
+		}
+		st.Releases = append(st.Releases, rec)
+	}
 	return st, nil
 }
 

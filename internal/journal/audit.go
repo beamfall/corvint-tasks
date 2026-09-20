@@ -32,6 +32,7 @@ type Result struct {
 	Identity              Identity
 	Head                  *snapshot.Head
 	LastSeq               wire.Size
+	LastReceiptSha256     wire.Digest
 	Pending               bool
 	StagingPresent        bool
 	StructuralConsistency string
@@ -43,6 +44,7 @@ type Result struct {
 	RuntimeQualification  string
 	Records               map[string]Record
 	request               *snapshot.Request
+	requestTicket         string
 }
 
 // Reader always streams receipt bytes, retaining only bounded path/digest
@@ -52,6 +54,8 @@ type Reader struct {
 	QueueID         wire.QueueID
 	PrimaryWorktree string
 	afterCapture    func() // deterministic capture/body boundary witness
+	divergentIntent string // set only on a value copy by Reconciliation
+	unpauseTickets  bool   // set only on a value copy by BarrierRemoval
 }
 
 type limits struct{ scan, selected int }
@@ -77,6 +81,55 @@ func (r Reader) Audit(paths ...string) (*Result, error) {
 	return r.audit(paths, "", profileLimits, true)
 }
 
+// BarrierRemoval preserves unrelated ticket edits while auditing a settled
+// journal for UNPAUSE. Every canonical ticket must still have a regular physical
+// projection. Queue, policy, private state and untracked tickets remain strict.
+func (r Reader) BarrierRemoval(paths ...string) (*Result, error) {
+	r.unpauseTickets = true
+	return r.Audit(paths...)
+}
+
+// Reconciliation returns canonical ticket bytes after a complete audit that
+// permits only this target's physical projection to diverge. Every other intent
+// and private projection remains strict; errors never supply write authority.
+func (r Reader) Reconciliation(targetID string, paths ...string) (*Result, error) {
+	target, err := wire.ParseTicketID("targetId", targetID)
+	if err != nil {
+		return nil, err
+	}
+	if target.QueueID() != r.QueueID.Raw {
+		return nil, wire.Errorf(wire.CodeOutOfScope, "targetId", "target queue differs")
+	}
+	r.divergentIntent = "intent/tickets/" + target.Local + ".json"
+	selected := append([]string{r.divergentIntent}, paths...)
+	result, err := r.Audit(selected...)
+	if err != nil {
+		return result, err
+	}
+	record, ok := result.Records[r.divergentIntent]
+	if !ok || record.Sha256 == nil {
+		return result, wire.Errorf(wire.CodeMalformed, "targetId", "canonical target does not exist")
+	}
+	return result, nil
+}
+
+func (r Reader) ReconciliationRelease(releaseID string, paths ...string) (*Result, error) {
+	if _, err := wire.ParseLabel("releaseId", releaseID); err != nil {
+		return nil, err
+	}
+	r.divergentIntent = "intent/releases/" + releaseID + ".json"
+	selected := append([]string{r.divergentIntent}, paths...)
+	result, err := r.Audit(selected...)
+	if err != nil {
+		return result, err
+	}
+	record, ok := result.Records[r.divergentIntent]
+	if !ok || record.Sha256 == nil {
+		return result, wire.Errorf(wire.CodeMalformed, "releaseId", "canonical release does not exist")
+	}
+	return result, nil
+}
+
 func (r Reader) audit(paths []string, request string, lim limits, checkIntent bool) (*Result, error) {
 	if r.Source == nil {
 		return nil, wire.Errorf(wire.CodeMalformed, "/", "missing byte source")
@@ -96,7 +149,7 @@ func (r Reader) audit(paths []string, request string, lim limits, checkIntent bo
 		if _, err := snapshot.PostBound(p); err != nil {
 			return nil, err
 		}
-		if len(selected) >= lim.scan+intent.MaxIntentRootEntries+wire.MaxTicketsPerQueue {
+		if len(selected) >= lim.scan+intent.MaxIntentRootEntries+wire.MaxTicketsPerQueue+wire.MaxReleasesPerQueue {
 			return nil, wire.Errorf(wire.CodeLimitExceeded, p, "selected path metadata bound")
 		}
 		selected[p] = true
@@ -196,7 +249,7 @@ func (r Reader) capture(lim limits) (*observation, error) {
 	if err := r.scan(o, ".", &remaining, true); err != nil {
 		return nil, err
 	}
-	intentRemaining := intent.MaxIntentRootEntries + wire.MaxTicketsPerQueue
+	intentRemaining := intent.MaxIntentRootEntries + wire.MaxTicketsPerQueue + wire.MaxReleasesPerQueue
 	if err := r.scan(o, "intent", &intentRemaining, true); err != nil {
 		return nil, err
 	}
@@ -282,6 +335,9 @@ func (r Reader) scan(o *observation, dir string, remaining *int, optional bool) 
 	if dir == "intent/tickets" && max > wire.MaxTicketsPerQueue {
 		max = wire.MaxTicketsPerQueue
 	}
+	if dir == "intent/releases" && max > wire.MaxReleasesPerQueue {
+		max = wire.MaxReleasesPerQueue
+	}
 	if dir == "staging" && max > snapshot.MaxStageChildren {
 		max = snapshot.MaxStageChildren
 	}
@@ -365,7 +421,7 @@ func (r Reader) scan(o *observation, dir string, remaining *int, optional bool) 
 
 func allowedDir(p string) bool {
 	switch p {
-	case "staging", "receipts", "requests", "attempts", "effects", "pinned", "evidence", "worktrees", "intent/tickets":
+	case "staging", "receipts", "requests", "attempts", "effects", "pinned", "evidence", "worktrees", "intent/tickets", "intent/releases":
 		return true
 	}
 	if strings.HasPrefix(p, "requests/") && len(p) == len("requests/")+2 {

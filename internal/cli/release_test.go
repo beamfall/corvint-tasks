@@ -1,0 +1,442 @@
+package cli_test
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/Beamfall/corvint-tasks/internal/fixture"
+	"github.com/Beamfall/corvint-tasks/internal/release"
+	"github.com/Beamfall/corvint-tasks/internal/wire"
+)
+
+func releaseCreatePayload(version, title, ticketID, predecessor string) string {
+	preds := "[]"
+	if predecessor != "" {
+		preds = fmt.Sprintf(`[%q]`, predecessor)
+	}
+	return fmt.Sprintf(`{"acceptanceCriteria":["release criterion"],"predecessorReleaseIds":%s,"requiredGates":[],"ticketIds":[%q],"title":%q,"version":%q}`, preds, ticketID, title, version)
+}
+
+func TestTMV0028_AS38_ReleaseKeepJournalReconciliation(t *testing.T) {
+	r := fixture.TempRepo(t)
+	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
+	fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), fixture.PolicyBytes())
+	if x := atm(t, r.Root, nil, "init"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatal(x.res)
+	}
+	id := createTicket(t, r.Root, "release-reconcile-ticket")
+	payload := releaseCreatePayload("0-9", "Version 0.9", id, "")
+	if x := atm(t, r.Root, nil, "release", "create", "--request-id", "release-reconcile-create", "--target", "v0-9", "--issued-at", "2026-09-20T12:01:00Z", "--payload", payload); x.res.Outcome != wire.OutcomeOK {
+		t.Fatal(x.res)
+	}
+	projection := filepath.Join(r.IntentDir, "releases", "v0-9.json")
+	edited := []byte("{manual malformed edit\n")
+	fixture.Write(t, projection, edited)
+	inspect := atm(t, r.Root, nil, "reconcile", "inspect", "v0-9")
+	if inspect.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("inspect: %+v", inspect.res)
+	}
+	digest := field(inspect.res.Items[0], "canonicalRecordSha256").Str
+	copyPath := filepath.Join(r.Root, "original-release-edit.json")
+	if err := os.WriteFile(copyPath, edited, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	kept := atm(t, r.Root, nil, "reconcile", "intent", "--request-id", "release-reconcile-keep", "--target", "v0-9", "--file", copyPath, "--keep-journal", "--canonical-sha256", digest)
+	if kept.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("keep: %+v", kept.res)
+	}
+	show := atm(t, r.Root, nil, "release", "show", "v0-9")
+	if show.res.Outcome != wire.OutcomeOK || field(show.res.Items[0], "revision").Str != "1" {
+		t.Fatalf("show: %+v", show.res)
+	}
+	adopt := atm(t, r.Root, nil, "reconcile", "intent", "--request-id", "release-reconcile-adopt", "--target", "v0-9", "--file", copyPath, "--adopt-file")
+	if adopt.res.Outcome == wire.OutcomeOK {
+		t.Fatal("release ADOPT_FILE succeeded")
+	}
+}
+
+func git(t *testing.T, root string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v: %s", args, err, out)
+	}
+}
+
+func createTicket(t *testing.T, root, request string) string {
+	t.Helper()
+	x := atm(t, root, nil, "ticket", "create", "--request-id", request, "--issued-at", "2026-09-20T12:00:00Z", "--payload", createPayloadJSON)
+	if x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("ticket create: %+v", x.res)
+	}
+	return field(x.res.Items[0], "ticketId").Str
+}
+
+// TestTMV0028_AS38_DurableTwoReleaseCreateAndReplay is the earliest durable
+// multi-release path: two ordered projections commit through the ordinary
+// receipt-before-state writer, and replay wins after later release changes.
+func TestTMV0028_AS38_DurableTwoReleaseCreateAndReplay(t *testing.T) {
+	r := fixture.TempRepo(t)
+	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
+	fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), fixture.PolicyBytes())
+	if x := atm(t, r.Root, nil, "init"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("init: %+v", x.res)
+	}
+	t1 := createTicket(t, r.Root, "ticket-one")
+	t2 := createTicket(t, r.Root, "ticket-two")
+	firstArgs := []string{"release", "create", "--request-id", "release-one", "--target", "v0-9", "--issued-at", "2026-09-20T12:01:00Z", "--payload", releaseCreatePayload("v0-9", "Version 0.9", t1, "")}
+	first := atm(t, r.Root, nil, firstArgs...)
+	if first.res.Outcome != wire.OutcomeOK || field(first.res.Items[0], "resultingRevision").Str != "1" {
+		t.Fatalf("first release: %+v", first.res)
+	}
+	stale := atm(t, r.Root, nil, "release", "update", "--request-id", "stale-release-update", "--target", "v0-9", "--expected-revision", "9", "--issued-at", "2026-09-20T12:01:30Z", "--payload", releaseCreatePayload("v0-9", "Changed", t1, ""))
+	if stale.res.Outcome == wire.OutcomeOK {
+		t.Fatal("stale release update succeeded")
+	}
+	second := atm(t, r.Root, nil, "release", "create", "--request-id", "release-two", "--target", "v1-0", "--issued-at", "2026-09-20T12:02:00Z", "--payload", releaseCreatePayload("v1-0", "Version 1.0", t2, "v0-9"))
+	if second.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("second release: %+v", second.res)
+	}
+	list := atm(t, r.Root, nil, "release", "list")
+	if list.res.Outcome != wire.OutcomeOK || len(list.res.Items) != 2 {
+		t.Fatalf("release list: %+v", list.res)
+	}
+	replay := atm(t, r.Root, nil, firstArgs...)
+	if replay.res.Outcome != wire.OutcomeOK || !field(replay.res.Items[0], "replayed").Bool || field(replay.res.Items[0], "releaseId").Str != "v0-9" || field(replay.res.Items[0], "resultingRevision").Str != "1" {
+		t.Fatalf("release replay after later mutation: %+v", replay.res)
+	}
+}
+
+func TestTMV0028_AS38_PolicyCanRemoveReleaseAuthorization(t *testing.T) {
+	r := fixture.TempRepo(t)
+	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
+	policy := fixture.PolicyValue()
+	policy.Obj.Set("roles", wire.ObjectValue(wire.NewObject().Set("OWNER", wire.Strings([]string{"CREATE"}))))
+	fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), wire.EncodeFile(policy))
+	if x := atm(t, r.Root, nil, "init"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("init: %+v", x.res)
+	}
+	ticketID := createTicket(t, r.Root, "policy-ticket")
+	denied := atm(t, r.Root, nil, "release", "create", "--request-id", "policy-release", "--target", "v1-0", "--issued-at", "2026-09-20T12:01:00Z", "--payload", releaseCreatePayload("v1-0", "Version 1.0", ticketID, ""))
+	if denied.res.Outcome == wire.OutcomeOK {
+		t.Fatal("configured policy removal was bypassed")
+	}
+	if listed := atm(t, r.Root, nil, "release", "list"); listed.res.Outcome != wire.OutcomeOK || len(listed.res.Items) != 0 {
+		t.Fatalf("denied release changed state: %+v", listed.res)
+	}
+}
+
+func TestTMV0028_AS38_CandidateSurvivesTaskmanWritesAndSourceEditInvalidates(t *testing.T) {
+	r := fixture.TempRepo(t)
+	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
+	fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), fixture.PolicyBytes())
+	fixture.Write(t, filepath.Join(r.Root, "source.txt"), []byte("candidate source\n"))
+	git(t, r.Root, "init")
+	git(t, r.Root, "config", "user.email", "fixture@example.invalid")
+	git(t, r.Root, "config", "user.name", "Fixture")
+	git(t, r.Root, "add", ".taskman", "source.txt")
+	git(t, r.Root, "commit", "-m", "fixture baseline")
+	if x := atm(t, r.Root, nil, "init"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("init: %+v", x.res)
+	}
+	ticketID := createTicket(t, r.Root, "candidate-ticket")
+	create := atm(t, r.Root, nil, "release", "create", "--request-id", "candidate-release", "--target", "v1-0", "--issued-at", "2026-09-20T12:01:00Z", "--payload", releaseCreatePayload("v1-0", "Version 1.0", ticketID, ""))
+	if create.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("release create: %+v", create.res)
+	}
+	capture := atm(t, r.Root, nil, "release", "candidate", "--request-id", "capture-v1", "--target", "v1-0", "--expected-revision", "1", "--issued-at", "2026-09-20T12:02:00Z")
+	if capture.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("candidate capture: %+v", capture.res)
+	}
+	ready := atm(t, r.Root, nil, "release", "readiness", "v1-0")
+	if ready.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("readiness: %+v", ready.res)
+	}
+	for _, v := range field(ready.res.Items[0], "missing").Arr {
+		if v.Str == "candidate-source-or-policy" {
+			t.Fatal("taskman projection writes invalidated the candidate")
+		}
+	}
+	if err := os.WriteFile(filepath.Join(r.Root, "source.txt"), []byte("changed source\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(r.Root, "source.txt"), []byte("candidate source\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(r.Root, "source.txt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	modeChanged := atm(t, r.Root, nil, "release", "readiness", "v1-0")
+	modeStale := false
+	for _, v := range field(modeChanged.res.Items[0], "missing").Arr {
+		modeStale = modeStale || v.Str == "candidate-source-or-policy"
+	}
+	if !modeStale {
+		t.Fatal("chmod did not invalidate candidate")
+	}
+	if err := os.Chmod(filepath.Join(r.Root, "source.txt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(r.Root, "source.txt"), []byte("changed source\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stale := atm(t, r.Root, nil, "release", "readiness", "v1-0")
+	if stale.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("stale readiness: %+v", stale.res)
+	}
+	found := false
+	for _, v := range field(stale.res.Items[0], "missing").Arr {
+		found = found || v.Str == "candidate-source-or-policy"
+	}
+	if !found {
+		t.Fatalf("source edit did not invalidate candidate: %+v", stale.res.Items[0])
+	}
+}
+
+func TestTMV0028_AS38_ReleaseDivergenceNeedsKeepJournal(t *testing.T) {
+	r := fixture.TempRepo(t)
+	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
+	fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), fixture.PolicyBytes())
+	if x := atm(t, r.Root, nil, "init"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("init: %+v", x.res)
+	}
+	ticketID := createTicket(t, r.Root, "reconcile-ticket")
+	created := atm(t, r.Root, nil, "release", "create", "--request-id", "reconcile-release", "--target", "v1-0", "--issued-at", "2026-09-20T12:01:00Z", "--payload", releaseCreatePayload("v1-0", "Version 1.0", ticketID, ""))
+	if created.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("release create: %+v", created.res)
+	}
+	path := filepath.Join(r.IntentDir, "releases", "v1-0.json")
+	canonical, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manual := []byte("manual release edit\n")
+	if err := os.WriteFile(path, manual, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inspect := atm(t, r.Root, nil, "reconcile", "inspect", "v1-0")
+	if inspect.res.Outcome != wire.OutcomeOK || len(inspect.res.Items) != 1 {
+		t.Fatalf("inspect: %+v", inspect.res)
+	}
+	digest := field(inspect.res.Items[0], "canonicalRecordSha256").Str
+	adopt := atm(t, r.Root, manual, "reconcile", "intent", "--target", "v1-0", "--request-id", "adopt-release", "--adopt-file", "--file", "-")
+	if adopt.res.Outcome == wire.OutcomeOK {
+		t.Fatal("release ADOPT_FILE unexpectedly succeeded")
+	}
+	kept := atm(t, r.Root, manual, "reconcile", "intent", "--target", "v1-0", "--request-id", "keep-release", "--keep-journal", "--canonical-sha256", digest, "--file", "-")
+	if kept.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("keep journal: %+v", kept.res)
+	}
+	restored, err := os.ReadFile(path)
+	if err != nil || string(restored) != string(canonical) {
+		t.Fatalf("canonical projection not restored: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(r.StateDir, "evidence", string(wire.Sum(manual)))); err != nil {
+		t.Fatalf("discarded bytes not retained: %v", err)
+	}
+}
+
+func TestTMV0028_AS38_AttestedPromotionAndImmutability(t *testing.T) {
+	r := fixture.TempRepo(t)
+	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
+	fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), fixture.PolicyBytes())
+	fixture.Write(t, filepath.Join(r.Root, "source.txt"), []byte("release source\n"))
+	git(t, r.Root, "init")
+	git(t, r.Root, "config", "user.email", "fixture@example.invalid")
+	git(t, r.Root, "config", "user.name", "Fixture")
+	git(t, r.Root, "add", ".taskman", "source.txt")
+	git(t, r.Root, "commit", "-m", "fixture baseline")
+	if x := atm(t, r.Root, nil, "init"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("init: %+v", x.res)
+	}
+	ticketID := createTicket(t, r.Root, "promotion-ticket")
+	create := atm(t, r.Root, nil, "release", "create", "--request-id", "promotion-release", "--target", "v0-9", "--issued-at", "2026-09-20T12:02:00Z", "--payload", releaseCreatePayload("v0-9", "Version 0.9", ticketID, ""))
+	if create.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("create: %+v", create.res)
+	}
+	for _, verb := range []string{"pause", "unpause"} {
+		if x := atm(t, r.Root, nil, verb, "--request-id", "release-"+verb); x.res.Outcome != wire.OutcomeOK {
+			t.Fatalf("%s after release: %+v", verb, x.res)
+		}
+	}
+	completed := atm(t, r.Root, nil, "ticket", "complete-manual", "--request-id", "complete-ticket", "--target", ticketID, "--expected-revision", "1", "--issued-at", "2026-09-20T12:01:00Z", "--payload", `{"evidence":[],"reason":"done"}`)
+	if completed.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("complete after release: %+v", completed.res)
+	}
+	capture := atm(t, r.Root, nil, "release", "candidate", "--request-id", "promotion-candidate", "--target", "v0-9", "--expected-revision", "1", "--issued-at", "2026-09-20T12:03:00Z")
+	if capture.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("capture: %+v", capture.res)
+	}
+	evidence := string(wire.Sum([]byte("external evidence")))
+	raw, err := os.ReadFile(filepath.Join(r.IntentDir, "releases", "v0-9.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := release.Decode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate := string(release.CandidateDigest(record.Candidate))
+	attestation := fmt.Sprintf(`{"attestation":{"actor":"untrusted","attestationId":"verify-v0-9","candidateSha256":"%s","criteria":["0"],"evidence":["%s"],"gateId":"verify","profile":"taskman-release-attestation/0","provenance":"EXTERNAL_ATTESTATION","recordedAt":"2026-09-20T12:04:00Z","result":"PASS","sourceIdentity":"external-ci"}}`, evidence, evidence)
+	bad := atm(t, r.Root, nil, "release", "record-gate", "--request-id", "stale-candidate-gate", "--target", "v0-9", "--expected-revision", "2", "--payload", attestation)
+	if bad.res.Outcome == wire.OutcomeOK {
+		t.Fatal("mismatched attestation candidate accepted")
+	}
+	attestation = strings.Replace(attestation, `"candidateSha256":"`+evidence, `"candidateSha256":"`+candidate, 1)
+	recorded := atm(t, r.Root, nil, "release", "record-gate", "--request-id", "promotion-gate", "--target", "v0-9", "--expected-revision", "2", "--issued-at", "2026-09-20T12:04:00Z", "--payload", attestation)
+	if recorded.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("record gate: %+v", recorded.res)
+	}
+	ready := atm(t, r.Root, nil, "release", "readiness", "v0-9")
+	if ready.res.Outcome != wire.OutcomeOK || field(ready.res.Items[0], "readiness").Str != "READY_ATTESTED" {
+		t.Fatalf("readiness: %+v", ready.res)
+	}
+	promoted := atm(t, r.Root, nil, "release", "promote", "--request-id", "promote-v0-9", "--target", "v0-9", "--expected-revision", "3", "--issued-at", "2026-09-20T12:05:00Z")
+	if promoted.res.Outcome != wire.OutcomeOK {
+		t.Fatalf("promote: %+v", promoted.res)
+	}
+	update := atm(t, r.Root, nil, "release", "update", "--request-id", "rewrite-promoted", "--target", "v0-9", "--expected-revision", "4", "--issued-at", "2026-09-20T12:06:00Z", "--payload", releaseCreatePayload("v0-9", "Changed", ticketID, ""))
+	if update.res.Outcome == wire.OutcomeOK {
+		t.Fatal("promoted release was mutable")
+	}
+}
+
+func TestTMV0028_AS38_UnknownGateRefusalLeavesStoreUsable(t *testing.T) {
+	r := fixture.TempRepo(t)
+	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
+	fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), fixture.PolicyBytes())
+	if x := atm(t, r.Root, nil, "init"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatal(x.res)
+	}
+	id := createTicket(t, r.Root, "unknown-gate-ticket")
+	payload := strings.Replace(releaseCreatePayload("v1", "Release", id, ""), `"requiredGates":[]`, `"requiredGates":["missing"]`, 1)
+	x := atm(t, r.Root, nil, "release", "create", "--request-id", "unknown-gate", "--target", "v1", "--payload", payload)
+	if x.res.Outcome == wire.OutcomeOK {
+		t.Fatal("unknown gate committed")
+	}
+	if x := atm(t, r.Root, nil, "release", "list"); x.res.Outcome != wire.OutcomeOK || len(x.res.Items) != 0 {
+		t.Fatal(x.res)
+	}
+	createTicket(t, r.Root, "after-unknown-gate")
+	if x := atm(t, r.Root, nil, "release", "create", "--request-id", "valid-gate-release", "--target", "v1", "--payload", releaseCreatePayload("v1", "Release", id, "")); x.res.Outcome != wire.OutcomeOK {
+		t.Fatal(x.res)
+	}
+	x = atm(t, r.Root, nil, "release", "update", "--request-id", "unknown-update-gate", "--target", "v1", "--expected-revision", "1", "--payload", payload)
+	if x.res.Outcome == wire.OutcomeOK {
+		t.Fatal("unknown gate update committed")
+	}
+	if x := atm(t, r.Root, nil, "release", "show", "v1"); x.res.Outcome != wire.OutcomeOK || field(x.res.Items[0], "revision").Str != "1" {
+		t.Fatal(x.res)
+	}
+}
+
+func TestTMV0028_AS38_PendingReleaseRedoAndTicketReconciliation(t *testing.T) {
+	r := fixture.TempRepo(t)
+	fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
+	fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), fixture.PolicyBytes())
+	if x := atm(t, r.Root, nil, "init"); x.res.Outcome != wire.OutcomeOK {
+		t.Fatal(x.res)
+	}
+	id := createTicket(t, r.Root, "redo-ticket")
+	headPath := filepath.Join(r.StateDir, "head.json")
+	head, err := os.ReadFile(headPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if x := atm(t, r.Root, nil, "release", "create", "--request-id", "pending-release", "--target", "v1", "--payload", releaseCreatePayload("v1", "Release", id, "")); x.res.Outcome != wire.OutcomeOK {
+		t.Fatal(x.res)
+	}
+	projection := filepath.Join(r.IntentDir, "releases", "v1.json")
+	want, err := os.ReadFile(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Reconstruct crash point C2: the receipt exists but head and projection
+	// have not advanced. Active staging recovery is outside this fixture.
+	fixture.Write(t, headPath, head)
+	if err := os.Remove(projection); err != nil {
+		t.Fatal(err)
+	}
+	createTicket(t, r.Root, "trigger-release-redo")
+	got, err := os.ReadFile(projection)
+	if err != nil || string(got) != string(want) {
+		t.Fatalf("release redo: %v", err)
+	}
+	ticketPath := filepath.Join(r.IntentDir, "tickets", id[len(id)-7:]+".json")
+	discard := []byte("{edited ticket")
+	fixture.Write(t, ticketPath, discard)
+	inspected := atm(t, r.Root, nil, "reconcile", "inspect", id)
+	if inspected.res.Outcome != wire.OutcomeOK {
+		t.Fatal(inspected.res)
+	}
+	digest := field(inspected.res.Items[0], "canonicalRecordSha256").Str
+	copyPath := filepath.Join(r.Root, "discard.json")
+	fixture.Write(t, copyPath, discard)
+	kept := atm(t, r.Root, nil, "reconcile", "intent", "--request-id", "keep-ticket-after-release", "--target", id, "--file", copyPath, "--keep-journal", "--canonical-sha256", digest)
+	if kept.res.Outcome != wire.OutcomeOK {
+		t.Fatal(kept.res)
+	}
+	if x := atm(t, r.Root, nil, "release", "list"); x.res.Outcome != wire.OutcomeOK || len(x.res.Items) != 1 {
+		t.Fatal(x.res)
+	}
+}
+
+func TestTMV0028_AS38_ManualGateParsedFromPrettyPayloadAndStdin(t *testing.T) {
+	for _, stdin := range []bool{false, true} {
+		t.Run(fmt.Sprint(stdin), func(t *testing.T) {
+			r := fixture.TempRepo(t)
+			fixture.Write(t, filepath.Join(r.IntentDir, "queue.json"), fixture.QueueBytes())
+			policy := fixture.PolicyValue()
+			policy.Obj.Set("roles", wire.ObjectValue(wire.NewObject().Set("OWNER", wire.Strings([]string{"CREATE", "RELEASE_CANDIDATE", "RELEASE_CREATE", "RELEASE_MANUAL_ATTEST"}))))
+			fixture.Write(t, filepath.Join(r.IntentDir, "policy.json"), wire.EncodeFile(policy))
+			git(t, r.Root, "init")
+			git(t, r.Root, "config", "user.email", "fixture@example.invalid")
+			git(t, r.Root, "config", "user.name", "Fixture")
+			git(t, r.Root, "add", ".taskman")
+			git(t, r.Root, "commit", "-m", "baseline")
+			if x := atm(t, r.Root, nil, "init"); x.res.Outcome != wire.OutcomeOK {
+				t.Fatal(x.res)
+			}
+			id := createTicket(t, r.Root, "manual-ticket")
+			if x := atm(t, r.Root, nil, "release", "create", "--request-id", "manual-release", "--target", "v1", "--payload", releaseCreatePayload("v1", "Release", id, "")); x.res.Outcome != wire.OutcomeOK {
+				t.Fatal(x.res)
+			}
+			if x := atm(t, r.Root, nil, "release", "candidate", "--request-id", "manual-candidate", "--target", "v1", "--expected-revision", "1"); x.res.Outcome != wire.OutcomeOK {
+				t.Fatal(x.res)
+			}
+			raw, err := os.ReadFile(filepath.Join(r.IntentDir, "releases", "v1.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			record, err := release.Decode(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			payload := fmt.Sprintf("{\n \"attestation\": {\"actor\":\"owner\",\"attestationId\":\"manual\",\"candidateSha256\":%q,\"criteria\":[\"0\"],\"evidence\":[%q],\"gateId\":\"verify\",\"profile\":\"taskman-release-attestation/0\",\"provenance\": \"MANUAL_ATTESTATION\",\"recordedAt\":\"2026-09-20T12:00:00Z\",\"result\":\"PASS\",\"sourceIdentity\":\"owner\"}\n}", release.CandidateDigest(record.Candidate), wire.Sum([]byte("evidence")))
+			args := []string{"release", "record-gate", "--request-id", "manual-gate", "--target", "v1", "--expected-revision", "2"}
+			var input []byte
+			if stdin {
+				args = append(args, "--payload-stdin")
+				input = []byte(payload)
+			} else {
+				args = append(args, "--payload", payload)
+			}
+			if x := atm(t, r.Root, input, args...); x.res.Outcome != wire.OutcomeOK {
+				t.Fatalf("manual payload: %+v", x.res)
+			}
+			raw, err = os.ReadFile(filepath.Join(r.IntentDir, "releases", "v1.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			record, err = release.Decode(raw)
+			if err != nil || len(record.Attestations) != 1 || record.Attestations[0].Provenance != release.Manual {
+				t.Fatalf("provenance: %+v %v", record, err)
+			}
+		})
+	}
+}

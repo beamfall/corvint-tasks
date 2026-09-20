@@ -1,0 +1,182 @@
+[
+  {
+    "argv": [
+      "init"
+    ],
+    "outcome": "OK",
+    "codes": []
+  },
+  {
+    "argv": [
+      "ticket",
+      "create",
+      "--request-id",
+      "example-create",
+      "--issued-at",
+      "2026-09-19T12:00:00Z",
+      "--payload-stdin"
+    ],
+    "outcome": "OK",
+    "codes": []
+  },
+  {
+    "argv": [
+      "ticket",
+      "create",
+      "--request-id",
+      "example-create",
+      "--issued-at",
+      "2026-09-19T12:00:00Z",
+      "--payload-stdin"
+    ],
+    "outcome": "OK",
+    "codes": []
+  },
+  {
+    "argv": [
+      "receipt",
+      "audit"
+    ],
+    "outcome": "ERROR",
+    "codes": [
+      "MALFORMED"
+    ]
+  },
+  {
+    "argv": [
+      "reconcile",
+      "inspect",
+      "ticket:acme:main:AT-0002"
+    ],
+    "outcome": "OK",
+    "codes": []
+  },
+  {
+    "argv": [
+      "reconcile",
+      "intent",
+      "--target",
+      "ticket:acme:main:AT-0002",
+      "--request-id",
+      "keep-1",
+      "--file",
+      "/private/tmp/corvint-tasks-build-20260919/reconcile-smoke-0a2tw0mv/original-edit.json",
+      "--keep-journal",
+      "--canonical-sha256",
+      "b5dc80d6eebcdcb4693049fbfa96cc9d06ff51f34234335743abcf898b66a0ea"
+    ],
+    "outcome": "OK",
+    "codes": []
+  },
+  {
+    "argv": [
+      "receipt",
+      "audit"
+    ],
+    "outcome": "OK",
+    "codes": []
+  },
+  {
+    "argv": [
+      "reconcile",
+      "intent",
+      "--target",
+      "ticket:acme:main:AT-0002",
+      "--request-id",
+      "keep-1",
+      "--file",
+      "/private/tmp/corvint-tasks-build-20260919/reconcile-smoke-0a2tw0mv/original-edit.json",
+      "--keep-journal",
+      "--canonical-sha256",
+      "b5dc80d6eebcdcb4693049fbfa96cc9d06ff51f34234335743abcf898b66a0ea"
+    ],
+    "outcome": "OK",
+    "codes": []
+  },
+  {
+    "argv": [
+      "reconcile",
+      "intent",
+      "--target",
+      "ticket:acme:main:AT-0002",
+      "--request-id",
+      "adopt-1",
+      "--file",
+      "-",
+      "--adopt-file"
+    ],
+    "outcome": "OK",
+    "codes": []
+  },
+  {
+    "argv": [
+      "reconcile",
+      "intent",
+      "--target",
+      "ticket:acme:main:AT-0002",
+      "--request-id",
+      "adopt-1",
+      "--file",
+      "-",
+      "--adopt-file"
+    ],
+    "outcome": "OK",
+    "codes": []
+  },
+  {
+    "argv": [
+      "ticket",
+      "prioritize",
+      "--target",
+      "ticket:acme:main:AT-0002",
+      "--expected-revision",
+      "2",
+      "--request-id",
+      "after-repair",
+      "--issued-at",
+      "2026-09-19T12:00:00Z",
+      "--payload",
+      "{\"order\":\"0\",\"priority\":\"P1\"}"
+    ],
+    "outcome": "OK",
+    "codes": []
+  },
+  {
+    "argv": [
+      "receipt",
+      "audit"
+    ],
+    "outcome": "OK",
+    "codes": []
+  },
+  {
+    "argv": [
+      "admit"
+    ],
+    "outcome": "NOT_RUN",
+    "codes": []
+  },
+  {
+    "argv": [
+      "plan",
+      "preview"
+    ],
+    "outcome": "NOT_RUN",
+    "codes": []
+  },
+  {
+    "argv": [
+      "cancel"
+    ],
+    "outcome": "NOT_RUN",
+    "codes": []
+  },
+  {
+    "argv": [
+      "archive",
+      "restore"
+    ],
+    "outcome": "NOT_RUN",
+    "codes": []
+  }
+]

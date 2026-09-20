@@ -291,6 +291,29 @@ func TestTMV0016_AS27_BarrierTemplatesExemptionsAndNoChange(t *testing.T) {
 					t.Fatal(r)
 				}
 			}
+
+			c := fixture.Ticket("T-1")
+			x = withTicket(t, x, c, c.Encode())
+			m := admin(Mutate, "ticket-"+scope+"-"+reason)
+			m.Envelope = wire.EncodeFile(object("profile", s(mutation.Profile), "requestId", s(m.RequestID), "actor", object("id", s(m.Actor.ID), "role", s(m.Actor.Role)), "queueId", s(fixture.QueueID), "targetId", s(c.TicketID.Raw), "expectedRevision", s("1"), "operation", s(mutation.OpPrioritize), "payload", object("priority", s("P1"), "order", s("0")), "issuedAt", s(string(timestamp))))
+			changed := Model(m, x)
+			if scope == "ALL" {
+				assertZero(t, changed, "Refused")
+				if !changed.Outcome.HasCode(wire.CodePaused) {
+					t.Fatal(changed)
+				}
+			} else {
+				if changed.Kind != "Transaction" {
+					t.Fatal(changed)
+				}
+				path, _ := snapshot.RequestPath(m.RequestID)
+				replayInput := Input{Replay: ReplayObservation{State: "FOUND", Record: changed.Plan.posts[path]}}
+				m.Actor.ID = "other"
+				denied := Model(m, replayInput)
+				if denied.Outcome.Outcome != mutation.OutcomeUnauthorized {
+					t.Fatal("replay bypassed actor binding", denied)
+				}
+			}
 			u := Model(admin(Unpause, "unpause"), x)
 			if u.Kind != "Transaction" {
 				t.Fatal(u)

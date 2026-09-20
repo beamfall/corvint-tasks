@@ -1,0 +1,14 @@
+{
+  "checked_gate_and_smoke_labels": [
+    "verify",
+    "receipt-verify",
+    "reconcile-verify",
+    "reconcile-final-verify",
+    "reconcile-final-smoke",
+    "reconcile-archive",
+    "barrier-verify",
+    "barrier-smoke",
+    "barrier-smoke-final"
+  ],
+  "remaining_group_members": []
+}

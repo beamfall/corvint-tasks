@@ -190,6 +190,10 @@ func TestTMV0007_AS08_CanonicalLatest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	rawReceipt, readErr := os.ReadFile(filepath.Join(repo.StateDir, "receipts", "000000000003.json"))
+	if readErr != nil || result.LastReceiptSha256 != wire.Sum(rawReceipt) {
+		t.Fatalf("terminal digest not bound: %v", readErr)
+	}
 	if result.LastSeq != "3" || result.Records["intent/tickets/A.json"].Seq != "3" || !bytes.Equal(result.Records["intent/tickets/A.json"].Raw, tk.Encode()) {
 		t.Fatalf("wrong latest: %+v", result)
 	}
@@ -990,5 +994,112 @@ func TestTMV0002_AS10_IntentDoesNotConsumeStateScanBudget(t *testing.T) {
 	_, err = r.audit(nil, "", limits{scan: stateEntries, selected: wire.MaxIntentTreeBytes}, true)
 	if err != nil {
 		t.Fatalf("intent lowered the state scan budget: %v", err)
+	}
+}
+
+func TestTMV0007_AS35_ReconciliationCanonicalReadIsTargetScoped(t *testing.T) {
+	for _, discard := range [][]byte{[]byte{}, []byte("{malformed"), fixture.Ticket("A").Encode()} {
+		t.Run(fmt.Sprint(len(discard)), func(t *testing.T) {
+			repo, r := setup(t)
+			a, b := fixture.Ticket("A"), fixture.Ticket("B")
+			appendReceipt(t, repo, "MUTATION", map[string][]byte{"intent/tickets/A.json": a.Encode(), "intent/tickets/B.json": b.Encode()}, "", true, true, false)
+			path := filepath.Join(repo.IntentDir, "tickets", "A.json")
+			fixture.Write(t, path, discard)
+			before := fixture.TreeSnapshot(t, repo.StateDir)
+			intentBefore := fixture.TreeSnapshot(t, repo.IntentDir)
+			result, err := r.Reconciliation(a.TicketID.Raw, "intent/queue.json", "intent/policy.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := result.Records["intent/tickets/A.json"]
+			if !bytes.Equal(got.Raw, a.Encode()) || got.Sha256 == nil || *got.Sha256 != wire.Sum(a.Encode()) || result.ProjectionAgreement != "ALL_EXCEPT_TARGET_AGREE" || result.HistoricalAcceptance != "NOT_OBSERVED" {
+				t.Fatalf("canonical authority: %+v", result)
+			}
+			fixture.AssertUntouched(t, repo, before, intentBefore, "canonical retrieval")
+			if !bytes.Equal(discard, a.Encode()) {
+				_, err = r.Audit()
+				requireCode(t, err, wire.CodeIntentDiverged)
+			}
+			fixture.Write(t, filepath.Join(repo.IntentDir, "tickets", "B.json"), []byte("unrelated edit"))
+			_, err = r.Reconciliation(a.TicketID.Raw)
+			requireCode(t, err, wire.CodeIntentDiverged)
+		})
+	}
+}
+
+func TestTMV0007_AS35_ReconciliationReadRefusesUnprovedHistory(t *testing.T) {
+	for _, kind := range []string{"private", "pending", "scope", "absent", "moving"} {
+		t.Run(kind, func(t *testing.T) {
+			repo, r := setup(t)
+			a := fixture.Ticket("A")
+			appendReceipt(t, repo, "MUTATION", map[string][]byte{"intent/tickets/A.json": a.Encode()}, "", true, true, false)
+			target := a.TicketID.Raw
+			want := wire.CodeJournalForked
+			switch kind {
+			case "private":
+				fixture.Write(t, filepath.Join(repo.StateDir, "reservations.json"), []byte("corrupt"))
+			case "pending":
+				want = wire.CodeRedoPending
+				appendReceipt(t, repo, "MUTATION", map[string][]byte{"intent/tickets/A.json": a.Encode()}, "", false, false, false)
+			case "scope":
+				want = wire.CodeOutOfScope
+				target = "ticket:other:q:A"
+			case "absent":
+				want = wire.CodeMalformed
+				target = "ticket:acme:main:MISSING"
+			case "moving":
+				want = wire.CodeSnapshotMoved
+				count := 0
+				r.afterCapture = func() {
+					count++
+					fixture.Write(t, filepath.Join(repo.IntentDir, "tickets", "A.json"), []byte(fmt.Sprint(count)))
+				}
+			}
+			_, err := r.Reconciliation(target)
+			requireCode(t, err, want)
+		})
+	}
+}
+
+func TestTMV0016_AS27_BarrierRemovalAuditRetainsStrictBoundaries(t *testing.T) {
+	for _, kind := range []string{"divergent", "missing", "extra", "queue", "policy", "private", "pending", "symlink"} {
+		t.Run(kind, func(t *testing.T) {
+			repo, r := setup(t)
+			a, b := fixture.Ticket("A"), fixture.Ticket("B")
+			appendReceipt(t, repo, "MUTATION", map[string][]byte{"intent/tickets/A.json": a.Encode(), "intent/tickets/B.json": b.Encode()}, "", true, true, false)
+			fixture.Write(t, filepath.Join(repo.IntentDir, "tickets", "A.json"), []byte{})
+			fixture.Write(t, filepath.Join(repo.IntentDir, "tickets", "B.json"), []byte("malformed edit"))
+			switch kind {
+			case "missing":
+				remove(t, filepath.Join(repo.IntentDir, "tickets", "A.json"))
+			case "extra":
+				fixture.Write(t, filepath.Join(repo.IntentDir, "tickets", "EXTRA.json"), []byte("untracked"))
+			case "queue", "policy":
+				fixture.Write(t, filepath.Join(repo.IntentDir, kind+".json"), []byte("{}\n"))
+			case "private":
+				fixture.Write(t, filepath.Join(repo.StateDir, "reservations.json"), []byte("{}\n"))
+			case "pending":
+				appendReceipt(t, repo, "MUTATION", map[string][]byte{"intent/tickets/A.json": a.Encode()}, "", false, false, false)
+			case "symlink":
+				remove(t, filepath.Join(repo.IntentDir, "tickets", "A.json"))
+				if err := os.Symlink("B.json", filepath.Join(repo.IntentDir, "tickets", "A.json")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before, intents := fixture.TreeSnapshot(t, repo.StateDir), fixture.TreeSnapshot(t, repo.IntentDir)
+			result, err := r.BarrierRemoval("intent/tickets/A.json", "intent/tickets/B.json")
+			if kind == "divergent" {
+				if err != nil || result.ProjectionAgreement != "TICKETS_NOT_COMPARED" || !bytes.Equal(result.Records["intent/tickets/A.json"].Raw, a.Encode()) || result.RuntimeQualification != "NOT_OBSERVED" {
+					t.Fatalf("unpause audit: %+v %v", result, err)
+				}
+				_, err = r.Audit()
+				requireCode(t, err, wire.CodeIntentDiverged)
+				_, err = r.Reconciliation(a.TicketID.Raw)
+				requireCode(t, err, wire.CodeIntentDiverged)
+			} else if err == nil {
+				t.Fatalf("%s accepted", kind)
+			}
+			fixture.AssertUntouched(t, repo, before, intents, "barrier removal audit")
+		})
 	}
 }

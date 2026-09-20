@@ -1,0 +1,9 @@
+{
+  "fixture": "/private/tmp/corvint-tasks-build-20260919/smoke-fixture",
+  "steps": 17,
+  "created_ticket": "ticket:acme:main:AT-0002",
+  "replay_ticket": "ticket:acme:main:AT-0002",
+  "archive_bytes": 24064,
+  "observed_eligibility": "UNKNOWN",
+  "result": "PASS for init/create/read/replay/audit/export/verify and explicit unavailable runtime commands"
+}

@@ -196,11 +196,12 @@ func TestTMV0002_AS10_TreeDigestFlatLayout(t *testing.T) {
 			os.RemoveAll(filepath.Join(r.IntentDir, "tickets"))
 			fixture.Write(t, filepath.Join(r.IntentDir, "tickets"), []byte("x\n"))
 		}, wire.CodeMalformed},
-		{"root over four entries", func(t *testing.T, r *fixture.Repo) {
-			// queue.json, policy.json, tickets/ plus two strays: the root
+		{"root over five entries", func(t *testing.T, r *fixture.Repo) {
+			// queue.json, policy.json, tickets/ plus three strays: the root
 			// entry bound fires during the listing, before names are checked.
 			fixture.Write(t, filepath.Join(r.IntentDir, "notes.md"), []byte("x\n"))
 			fixture.Write(t, filepath.Join(r.IntentDir, "more.md"), []byte("x\n"))
+			fixture.Write(t, filepath.Join(r.IntentDir, "extra.md"), []byte("x\n"))
 		}, wire.CodeLimitExceeded},
 	}
 	for _, c := range cases {

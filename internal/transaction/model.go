@@ -10,6 +10,7 @@ import (
 
 	"github.com/Beamfall/corvint-tasks/internal/intent"
 	"github.com/Beamfall/corvint-tasks/internal/mutation"
+	"github.com/Beamfall/corvint-tasks/internal/release"
 	"github.com/Beamfall/corvint-tasks/internal/snapshot"
 	"github.com/Beamfall/corvint-tasks/internal/ticket"
 	"github.com/Beamfall/corvint-tasks/internal/wire"
@@ -27,6 +28,7 @@ const (
 	// the same for each, so a per-verb operation would multiply the closed
 	// tables without adding a check.
 	Mutate      = snapshot.StageMutate
+	Release     = snapshot.StageRelease
 	NotObserved = "NOT_OBSERVED"
 	// FixtureNoRuntime is an explicit hypothetical premise, not an observation.
 	FixtureNoRuntime = "HYPOTHETICAL_FIXTURE_NO_RUNTIME"
@@ -76,6 +78,10 @@ type Input struct {
 	Inventory                                  *Inventory
 	Head, Queue, Policy, Barrier, Reservations []byte
 	CanonicalTickets                           [][]byte
+	CanonicalReleases                          [][]byte
+	ReleaseCandidate                           *release.Candidate
+	ReleaseGates                               []release.Gate
+	ReleaseObservation                         release.Observation
 	Premise, Branch                            string
 	Replay                                     ReplayObservation
 	RecordedAt                                 wire.Timestamp
@@ -159,19 +165,23 @@ func Digest(r Request) (wire.Digest, error) {
 	if _, e = mutation.ParseRequestID("requestId", r.RequestID); e != nil {
 		return "", e
 	}
-	if len(r.File) > wire.MaxTicketFileBytes {
+	fileLimit := wire.MaxTicketFileBytes
+	if r.Operation == Release {
+		fileLimit = wire.MaxReleaseFileBytes
+	}
+	if len(r.File) > fileLimit {
 		return "", limit("offered file")
 	}
 	if r.Operation != Init && (len(r.Queue) != 0 || len(r.Policy) != 0 || r.PrimaryWorktree != "") {
 		return "", malformed("inapplicable INIT inputs")
 	}
-	if r.Operation != KeepJournal && r.CanonicalSha256 != "" {
+	if r.Operation != KeepJournal && r.Operation != Release && r.CanonicalSha256 != "" {
 		return "", malformed("inapplicable canonical choice")
 	}
-	if r.Operation != KeepJournal && r.Operation != AdoptFile && (r.TargetID != "" || r.File != nil) {
+	if r.Operation != KeepJournal && r.Operation != AdoptFile && r.Operation != Release && (r.TargetID != "" || r.File != nil) {
 		return "", malformed("inapplicable ticket inputs")
 	}
-	if r.Operation != Mutate && r.Envelope != nil {
+	if r.Operation != Mutate && r.Operation != Release && r.Envelope != nil {
 		return "", malformed("inapplicable mutation envelope")
 	}
 	o := object("actor", object("id", s(r.Actor.ID), "role", s(r.Actor.Role)), "operation", s(r.Operation), "queueId", s(r.QueueID), "requestId", s(r.RequestID))
@@ -220,6 +230,30 @@ func Digest(r Request) (wire.Digest, error) {
 		}
 		// The mutation's own canonical bytes are the preimage (TM-V0-006);
 		// no timestamp and no current revision enters it.
+		return env.Sha256(), nil
+	case Release:
+		if r.File != nil {
+			if _, e = wire.ParseLabel("targetId", r.TargetID); e != nil {
+				return "", e
+			}
+			if _, e = wire.ParseDigest("canonicalSha256", string(r.CanonicalSha256)); e != nil {
+				return "", e
+			}
+			o.Obj.Set("targetId", s(r.TargetID))
+			o.Obj.Set("fileSha256", s(string(wire.Sum(r.File))))
+			o.Obj.Set("canonicalSha256", s(string(r.CanonicalSha256)))
+			return wire.Sum(wire.EncodeFile(o)), nil
+		}
+		env, e := release.DecodeEnvelope(r.Envelope)
+		if e != nil {
+			return "", e
+		}
+		if env.QueueID != q || env.RequestID != r.RequestID || env.ReleaseID != r.TargetID {
+			return "", malformed("release envelope identity")
+		}
+		if env.Actor.ID != r.Actor.ID || env.Actor.Role != r.Actor.Role {
+			return "", malformed("release envelope actor")
+		}
 		return env.Sha256(), nil
 	case KeepJournal, AdoptFile:
 		id, e := wire.ParseTicketID("targetId", r.TargetID)
@@ -274,6 +308,15 @@ func Model(r Request, in Input) Result {
 	if r.Actor.Role != "OWNER" && r.Actor.Role != "OPERATOR" {
 		return refused(r.RequestID, mutation.OutcomeUnauthorized, "", "outside hypothetical role subset")
 	}
+	if r.Operation == Mutate {
+		env, err := mutation.Decode(r.Envelope)
+		if err != nil {
+			return failed(r.RequestID, err)
+		}
+		if env.Actor.ID != r.Actor.ID || env.Actor.Role != r.Actor.Role {
+			return refused(r.RequestID, mutation.OutcomeUnauthorized, "", "envelope actor differs from invoking binding")
+		}
+	}
 	d, e := Digest(r)
 	if e != nil {
 		return failed(r.RequestID, e)
@@ -299,7 +342,8 @@ func Model(r Request, in Input) Result {
 		}
 		if req.Entry.Outcome.Outcome == mutation.OutcomeCompleted {
 			ticketOperation := r.Operation == KeepJournal || r.Operation == AdoptFile || r.Operation == Mutate
-			if ticketOperation != (req.Entry.Outcome.ResultingRevision != nil) || len(req.Entry.Outcome.Codes) != 0 {
+			releaseOperation := r.Operation == Release
+			if ticketOperation != (req.Entry.Outcome.ResultingRevision != nil) || releaseOperation != (req.Entry.Outcome.ReleaseID != nil) || len(req.Entry.Outcome.Codes) != 0 {
 				return failed(r.RequestID, malformed("replay outcome shape"))
 			}
 		}
@@ -331,14 +375,18 @@ func Model(r Request, in Input) Result {
 		}
 		return refused(r.RequestID, mutation.OutcomeBlocked, wire.CodePaused, "barrier replacement forbidden")
 	}
+	if state.barrier != nil && state.barrier.Scope == "ALL" && r.Operation != KeepJournal && r.Operation != AdoptFile && r.Operation != Unpause {
+		return refused(r.RequestID, mutation.OutcomeBlocked, wire.CodePaused, "ALL barrier forbids mutation")
+	}
 	if r.Operation == Unpause && state.barrier == nil {
 		return noChange(r.RequestID)
 	}
-	if (r.Operation == Init || r.Operation == KeepJournal || r.Operation == AdoptFile || r.Operation == Mutate) && in.Branch != state.queue.IntentBranch {
+	if (r.Operation == Init || r.Operation == KeepJournal || r.Operation == AdoptFile || r.Operation == Mutate || r.Operation == Release) && in.Branch != state.queue.IntentBranch {
 		return refused(r.RequestID, mutation.OutcomeBlocked, wire.CodeIntentBranchMismatch, "primary intent branch differs")
 	}
 	posts := map[string][]byte{}
 	var effect *ticketEffect
+	var relEffect *releaseEffect
 	switch r.Operation {
 	case Init:
 		for path := range in.Inventory.files {
@@ -390,6 +438,51 @@ func Model(r Request, in Input) Result {
 			posts["intent/queue.json"] = bytes.Clone(wire.EncodeFile(applied.QueuePost.Value()))
 		}
 		effect = &ticketEffect{pre: pre, post: applied.Post, kind: receiptKind(env.Operation)}
+	case Release:
+		if r.File != nil {
+			current := state.releases[r.TargetID]
+			if current == nil || wire.Sum(release.Encode(current)) != r.CanonicalSha256 {
+				return failed(r.RequestID, malformed("canonical release choice changed"))
+			}
+			path := "intent/releases/" + current.ReleaseID + ".json"
+			if !in.Inventory.matches(path, r.File) {
+				return failed(r.RequestID, malformed("physical release projection differs from original choice"))
+			}
+			posts[path] = release.Encode(current)
+			posts["evidence/"+string(wire.Sum(r.File))] = bytes.Clone(r.File)
+			relEffect = &releaseEffect{pre: current, post: current, kind: "RECONCILE"}
+			break
+		}
+		env, e := release.DecodeEnvelope(r.Envelope)
+		if e != nil {
+			return failed(r.RequestID, e)
+		}
+		current := state.releases[env.ReleaseID]
+		configured := state.policy.Roles
+		post, e := release.Apply(env, release.Actor{ID: r.Actor.ID, Role: r.Actor.Role}, current, state.queue.QueueID, configured, state.ticketIDs(), in.RecordedAt, in.ReleaseCandidate, in.ReleaseGates, in.ReleaseObservation)
+		if e != nil {
+			return failed(r.RequestID, e)
+		}
+		prospective := make([]*release.Record, 0, len(state.releases)+1)
+		for id, existing := range state.releases {
+			if id != post.ReleaseID {
+				prospective = append(prospective, existing)
+			}
+		}
+		prospective = append(prospective, post)
+		if e = release.ValidateGraph(prospective); e != nil {
+			return failed(r.RequestID, e)
+		}
+		path := "intent/releases/" + post.ReleaseID + ".json"
+		if current == nil {
+			if _, exists := in.Inventory.files[path]; exists {
+				return failed(r.RequestID, malformed("created release already has a projection"))
+			}
+		} else if !in.Inventory.matches(path, release.Encode(current)) {
+			return failed(r.RequestID, malformed("physical release projection differs from canonical record"))
+		}
+		posts[path] = release.Encode(post)
+		relEffect = &releaseEffect{pre: current, post: post}
 	case KeepJournal, AdoptFile:
 		target, _ := state.tickets.Get(r.TargetID)
 		if target == nil {
@@ -419,7 +512,7 @@ func Model(r Request, in Input) Result {
 			effect = &ticketEffect{pre: target, post: adopted.Post, kind: "RECONCILE"}
 		}
 	}
-	p, out, e := freeze(r, d, in.RecordedAt, in.Inventory, state.head, posts, effect)
+	p, out, e := freeze(r, d, in.RecordedAt, in.Inventory, state.head, posts, effect, relEffect)
 	if e != nil {
 		return failed(r.RequestID, e)
 	}
@@ -443,11 +536,20 @@ func emptyReservations(q string) []byte {
 }
 
 type inputState struct {
-	head    *snapshot.Head
-	barrier *snapshot.Barrier
-	queue   *intent.Queue
-	policy  *intent.Policy
-	tickets *ticket.Inventory
+	head     *snapshot.Head
+	barrier  *snapshot.Barrier
+	queue    *intent.Queue
+	policy   *intent.Policy
+	tickets  *ticket.Inventory
+	releases map[string]*release.Record
+}
+
+func (s inputState) ticketIDs() map[string]bool {
+	out := map[string]bool{}
+	for _, id := range s.tickets.IDs() {
+		out[id] = true
+	}
+	return out
 }
 
 func validateInput(r Request, in Input) (inputState, error) {
@@ -556,6 +658,43 @@ func validateInput(r Request, in Input) (inputState, error) {
 	if count != len(records) {
 		return st, malformed("incomplete canonical ticket inventory")
 	}
+	st.releases = map[string]*release.Record{}
+	for _, raw := range in.CanonicalReleases {
+		rec, decodeErr := release.Decode(raw)
+		if decodeErr != nil {
+			return st, decodeErr
+		}
+		if rec.QueueID != q.QueueID || st.releases[rec.ReleaseID] != nil {
+			return st, malformed("invalid canonical release inventory")
+		}
+		path := "intent/releases/" + rec.ReleaseID + ".json"
+		physical, ok := in.Inventory.files[path]
+		if !ok {
+			return st, malformed("canonical release has no physical projection")
+		}
+		if r.Operation != Release || rec.ReleaseID != r.TargetID {
+			if physical.Sha256 != wire.Sum(raw) || physical.Bytes.Uint64() != uint64(len(raw)) {
+				return st, malformed("unselected divergent release")
+			}
+		}
+		st.releases[rec.ReleaseID] = rec
+	}
+	releaseCount := 0
+	for path := range in.Inventory.files {
+		if strings.HasPrefix(path, "intent/releases/") {
+			releaseCount++
+		}
+	}
+	if releaseCount != len(st.releases) {
+		return st, malformed("incomplete canonical release inventory")
+	}
+	all := make([]*release.Record, 0, len(st.releases))
+	for _, rec := range st.releases {
+		all = append(all, rec)
+	}
+	if e = release.ValidateGraph(all); e != nil {
+		return st, e
+	}
 	return st, nil
 }
 
@@ -576,6 +715,11 @@ type ticketEffect struct {
 	kind      string
 }
 
+type releaseEffect struct {
+	pre, post *release.Record
+	kind      string
+}
+
 // receiptKind maps a §3.3 mutation operation to its §3.1 receipt kind. Only
 // ARCHIVE and RESTORE have their own kind; every other mutation is MUTATION.
 func receiptKind(op string) string {
@@ -588,7 +732,7 @@ func receiptKind(op string) string {
 	return "MUTATION"
 }
 
-func freeze(r Request, d wire.Digest, now wire.Timestamp, inv *Inventory, base *snapshot.Head, posts map[string][]byte, eff *ticketEffect) (*Plan, mutation.Outcome, error) {
+func freeze(r Request, d wire.Digest, now wire.Timestamp, inv *Inventory, base *snapshot.Head, posts map[string][]byte, eff *ticketEffect, rel *releaseEffect) (*Plan, mutation.Outcome, error) {
 	seq := uint64(1)
 	generation := wire.Size("0")
 	var prev *wire.Digest
@@ -613,6 +757,14 @@ func freeze(r Request, d wire.Digest, now wire.Timestamp, inv *Inventory, base *
 		// operation chains from the record it read.
 		if eff.pre != nil {
 			expected = &eff.pre.Revision
+		}
+	}
+	if rel != nil {
+		id := rel.post.ReleaseID
+		out.ReleaseID = &id
+		out.ResultingReleaseRevision = &rel.post.Revision
+		if rel.pre != nil {
+			expected = &rel.pre.Revision
 		}
 	}
 	req := wire.EncodeFile(object("requestId", s(r.RequestID), "seq", s(string(n)), "mutationSha256", s(string(d)), "outcome", out.Value()))
@@ -674,7 +826,14 @@ func freeze(r Request, d wire.Digest, now wire.Timestamp, inv *Inventory, base *
 	if eff != nil {
 		kind = eff.kind
 	}
-	raw := wire.EncodeFile(object("profile", s(snapshot.ProfileReceipt), "seq", s(string(n)), "prev", digestValue(prev), "kind", s(kind), "requestId", s(r.RequestID), "actor", object("id", s(r.Actor.ID), "role", s(r.Actor.Role)), "ticketId", ticketVal, "attemptId", wire.Null(), "generation", wire.Null(), "expectedRevision", countValue(expected), "headGeneration", s(string(generation)), "pre", wire.Array(pre...), "post", wire.Array(post...), "outcome", s(out.Outcome), "codes", wire.Array(), "recordedAt", s(string(now))))
+	if rel != nil && rel.kind != "" {
+		kind = rel.kind
+	}
+	receiptValue := object("profile", s(snapshot.ProfileReceipt), "seq", s(string(n)), "prev", digestValue(prev), "kind", s(kind), "requestId", s(r.RequestID), "actor", object("id", s(r.Actor.ID), "role", s(r.Actor.Role)), "ticketId", ticketVal, "attemptId", wire.Null(), "generation", wire.Null(), "expectedRevision", countValue(expected), "headGeneration", s(string(generation)), "pre", wire.Array(pre...), "post", wire.Array(post...), "outcome", s(out.Outcome), "codes", wire.Array(), "recordedAt", s(string(now)))
+	if rel != nil {
+		receiptValue.Obj.Set("releaseId", s(rel.post.ReleaseID))
+	}
+	raw := wire.EncodeFile(receiptValue)
 	if _, e := snapshot.DecodeReceipt(raw); e != nil {
 		return nil, out, e
 	}

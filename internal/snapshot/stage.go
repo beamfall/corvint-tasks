@@ -19,6 +19,7 @@ const (
 	// is MUTATION, ARCHIVE or RESTORE (§3.1); the stage operation name is the
 	// same for all of them because the staged artifact shape is identical.
 	StageMutate                    = "MUTATE"
+	StageRelease                   = "RELEASE"
 	MaxStageDescriptorBytes        = 2422
 	MaxStageReceiptSeq      uint64 = 1000000
 	UnpauseReceiptBytes            = 1683
@@ -58,6 +59,8 @@ func StageLimits(op string) (int, int) {
 		return 5, 1467
 	case StageMutate:
 		return 6, 1615
+	case StageRelease:
+		return 6, 2600
 	}
 	return 0, 0
 }
@@ -95,7 +98,7 @@ func DecodeStageDescriptor(raw []byte) (*StageDescriptor, error) {
 	if e = wire.CheckProfile("stage/profile", r.Field("profile").String(), "taskman-stage/0"); e != nil {
 		return nil, e
 	}
-	d := &StageDescriptor{QueueID: r.Field("queueId").QueueID().Raw, Operation: r.Field("operation").Enum(StageInit, StagePause, StageUnpause, StageKeepJournal, StageAdoptFile, StageMutate), RequestID: r.Field("requestId").String(), RequestSha256: r.Field("requestSha256").Digest(), RecordedAt: r.Field("recordedAt").Timestamp()}
+	d := &StageDescriptor{QueueID: r.Field("queueId").QueueID().Raw, Operation: r.Field("operation").Enum(StageInit, StagePause, StageUnpause, StageKeepJournal, StageAdoptFile, StageMutate, StageRelease), RequestID: r.Field("requestId").String(), RequestSha256: r.Field("requestSha256").Digest(), RecordedAt: r.Field("recordedAt").Timestamp()}
 	b := r.Field("base")
 	if !b.IsNull() {
 		b.Closed("lastSeq", "lastReceiptSha256")
@@ -178,6 +181,9 @@ func (d StageDescriptor) shape() error {
 			if d.Operation == StageInit {
 				cap = wire.MaxQueueFileBytes
 			}
+			if d.Operation == StageRelease {
+				cap = wire.MaxReleaseFileBytes
+			}
 		case "POST":
 			switch {
 			case a.Target == requestPath:
@@ -186,7 +192,7 @@ func (d StageDescriptor) shape() error {
 				if d.Operation == StageInit {
 					cap = 551
 				}
-				if d.Operation == StageKeepJournal || d.Operation == StageAdoptFile || d.Operation == StageMutate {
+				if d.Operation == StageKeepJournal || d.Operation == StageAdoptFile || d.Operation == StageMutate || d.Operation == StageRelease {
 					cap = 579
 				}
 			case a.Target == "barrier.json" && d.Operation == StagePause:
@@ -201,7 +207,14 @@ func (d StageDescriptor) shape() error {
 				}
 				key = "ticket"
 				cap = 131072
-			case strings.HasPrefix(a.Target, "evidence/") && d.Operation == StageKeepJournal:
+			case strings.HasPrefix(a.Target, "intent/releases/") && d.Operation == StageRelease:
+				id := strings.TrimSuffix(strings.TrimPrefix(a.Target, "intent/releases/"), ".json")
+				if _, e := wire.ParseLabel("target", id); e != nil || a.Target != "intent/releases/"+id+".json" {
+					return stageMalformed("release target")
+				}
+				key = "release"
+				cap = wire.MaxReleaseFileBytes
+			case strings.HasPrefix(a.Target, "evidence/") && (d.Operation == StageKeepJournal || d.Operation == StageRelease):
 				if a.Target != "evidence/"+string(a.Sha256) {
 					return stageMalformed("discarded evidence identity")
 				}
@@ -256,6 +269,11 @@ func (d StageDescriptor) shape() error {
 		required["ticket"] = 1
 	case StageMutate:
 		required["ticket"] = 1
+	case StageRelease:
+		required["release"] = 1
+		if counts["discard"] != 0 {
+			required["discard"] = 1
+		}
 	}
 	// A MUTATE queue post is present only when CREATE allocated a serial, so it
 	// is optional rather than required.
@@ -277,7 +295,7 @@ func (d StageDescriptor) shape() error {
 	switch d.Operation {
 	case StageInit:
 		maxEvidence = 3
-	case StageKeepJournal, StageAdoptFile, StageMutate:
+	case StageKeepJournal, StageAdoptFile, StageMutate, StageRelease:
 		maxEvidence = 1
 	}
 	if ecount > maxEvidence {

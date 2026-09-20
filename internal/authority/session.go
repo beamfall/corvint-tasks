@@ -26,6 +26,7 @@ const (
 	RolePolicy       = Role(fixturePolicy)
 	RoleImportMap    = Role(fixtureImportMap)
 	RoleTicket       = Role(fixtureTicket)
+	RoleRelease      = Role(fixtureRelease)
 )
 
 // Target is one publication destination: a role plus the exact entry name
@@ -118,3 +119,10 @@ func (s *Session) Replace(stage *Stage, t Target, expected *wire.Digest) error {
 // unassigned slot, which every later reader refuses, so a writer removes
 // each slot it used.
 func (s *Session) RemoveStage(slot Slot) error { return s.inner.removeStage(fixtureSlot(slot)) }
+
+// RemoveBarrier unlinks only barrier.json after checking its exact pre digest,
+// then syncs the retained parent directory. The caller must first commit the
+// UNPAUSE receipt. An already absent barrier is synced as an idempotent removal.
+func (s *Session) RemoveBarrier(expected wire.Digest) error {
+	return s.inner.removeBarrier(fixtureTarget{fixtureBarrier, "barrier.json"}, expected)
+}

@@ -152,24 +152,26 @@ func scanIntent(repo *intent.Repository) ([]archive.FileEntry, error) {
 			files = append(files, entry)
 		}
 	}
-	entries, err := os.ReadDir(filepath.Join(root, intent.TicketsDir))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return files, nil
-		}
-		return nil, err
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		rel := "intent/tickets/" + e.Name()
-		entry, ok, err := fileEntry(filepath.Join(root, intent.TicketsDir, e.Name()), rel)
+	for _, dir := range []string{intent.TicketsDir, intent.ReleasesDir} {
+		entries, err := os.ReadDir(filepath.Join(root, dir))
 		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
 			return nil, err
 		}
-		if ok {
-			files = append(files, entry)
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+				continue
+			}
+			rel := "intent/" + dir + "/" + e.Name()
+			entry, ok, err := fileEntry(filepath.Join(root, dir, e.Name()), rel)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				files = append(files, entry)
+			}
 		}
 	}
 	return files, nil

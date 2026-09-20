@@ -14,11 +14,13 @@ import (
 type RequestIndex struct {
 	Reader                    Reader
 	Identity                  Identity
+	TicketID                  string // original receipt target from the last successful lookup
 	IntentProjectionAgreement string
 }
 
 func (i *RequestIndex) Lookup(id string) (mutation.IndexEntry, bool, error) {
 	i.Identity = Identity{}
+	i.TicketID = ""
 	i.IntentProjectionAgreement = "NOT_OBSERVED"
 	if _, err := snapshot.RequestPath(id); err != nil {
 		return mutation.IndexEntry{}, false, err
@@ -33,5 +35,6 @@ func (i *RequestIndex) Lookup(id string) (mutation.IndexEntry, bool, error) {
 	if result.request == nil {
 		return mutation.IndexEntry{}, false, nil
 	}
+	i.TicketID = result.requestTicket
 	return result.request.Entry, true, nil
 }

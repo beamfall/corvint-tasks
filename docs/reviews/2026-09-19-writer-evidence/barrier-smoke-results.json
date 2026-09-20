@@ -1,0 +1,140 @@
+[
+  {
+    "argv": [
+      "init"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "ticket",
+      "create",
+      "--request-id",
+      "second",
+      "--issued-at",
+      "2026-09-19T12:00:00Z",
+      "--payload-stdin"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "pause",
+      "--request-id",
+      "pause"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "queue",
+      "status"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "pause",
+      "--request-id",
+      "already-paused"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "ticket",
+      "create",
+      "--request-id",
+      "second",
+      "--issued-at",
+      "2026-09-19T12:00:00Z",
+      "--payload-stdin"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "unpause",
+      "--request-id",
+      "unpause"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "queue",
+      "status"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "pause",
+      "--request-id",
+      "pause"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "queue",
+      "status"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "unpause",
+      "--request-id",
+      "unpause"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "pause",
+      "--request-id",
+      "pause-for-edit"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "unpause",
+      "--request-id",
+      "unpause-with-edit"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "reconcile",
+      "inspect",
+      "ticket:acme:main:AT-0002"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "reconcile",
+      "intent",
+      "--target",
+      "ticket:acme:main:AT-0002",
+      "--request-id",
+      "keep-empty",
+      "--file",
+      "-",
+      "--keep-journal",
+      "--canonical-sha256",
+      "01394122aa45eeb67d3db51bad0f9c247839c0e8651b052b7783f9304ad4d091"
+    ],
+    "outcome": "OK"
+  },
+  {
+    "argv": [
+      "receipt",
+      "audit"
+    ],
+    "outcome": "OK"
+  }
+]

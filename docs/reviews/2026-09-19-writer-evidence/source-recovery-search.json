@@ -1,0 +1,12 @@
+{
+  "scanned": 206,
+  "matches": {},
+  "missing": [
+    "corvint-task-control-plane-v0.md",
+    "corvint-task-runner-review-2026-09-06.md",
+    "AGENT-TASK-MANAGER-2026-09-04.md",
+    "work-queue-observation-v0.md",
+    "AGENTS.md",
+    "SPEC-DRIVEN-DEVELOPMENT.md"
+  ]
+}

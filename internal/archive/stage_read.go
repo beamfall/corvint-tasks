@@ -227,15 +227,19 @@ func (s *archiveRead) captureLayout(maxScan, maxFiles int) (files []sourceFile, 
 			return e
 		}
 		abs := root
-		if dir == "intent/tickets" {
-			abs = filepath.Join(root, "tickets")
+		if dir == "intent/tickets" || dir == "intent/releases" {
+			abs = filepath.Join(root, strings.TrimPrefix(dir, "intent/"))
 		}
 		sc.info[abs] = listing.DirectoryInfo
 		for _, entry := range listing.Entries {
 			p := dir + "/" + entry.Name
 			sc.info[filepath.Join(abs, entry.Name)] = entry.Info
-			if p == "intent/tickets" && entry.Info.IsDir() {
-				if e = collect(p, wire.MaxTicketsPerQueue); e != nil {
+			if (p == "intent/tickets" || p == "intent/releases") && entry.Info.IsDir() {
+				limit := wire.MaxTicketsPerQueue
+				if p == "intent/releases" {
+					limit = wire.MaxReleasesPerQueue
+				}
+				if e = collect(p, limit); e != nil {
 					return e
 				}
 				continue

@@ -158,6 +158,7 @@ type Receipt struct {
 	ActorID          string
 	ActorRole        string
 	TicketID         *wire.TicketID
+	ReleaseID        *string
 	AttemptID        *string
 	Generation       *wire.Size
 	ExpectedRevision *wire.Count
@@ -180,8 +181,11 @@ func DecodeReceipt(data []byte) (*Receipt, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, ok := v.Obj.Get("releaseId"); !ok {
+		v.Obj.Set("releaseId", wire.Null())
+	}
 	r := wire.NewReader(v, "/")
-	r.Closed("profile", "seq", "prev", "kind", "requestId", "actor", "ticketId", "attemptId", "generation",
+	r.Closed("profile", "seq", "prev", "kind", "requestId", "actor", "ticketId", "releaseId", "attemptId", "generation",
 		"expectedRevision", "headGeneration", "pre", "post", "outcome", "codes", "recordedAt")
 	if err := r.Err(); err != nil {
 		return nil, err
@@ -202,6 +206,12 @@ func DecodeReceipt(data []byte) (*Receipt, error) {
 	if !tk.IsNull() {
 		id := tk.TicketID()
 		rc.TicketID = &id
+	}
+	if value, ok := v.Obj.Get("releaseId"); ok {
+		rc.ReleaseID = wire.NewReader(value, "/releaseId").LabelOrNull()
+	}
+	if rc.TicketID != nil && rc.ReleaseID != nil {
+		return nil, wire.Errorf(wire.CodeMalformed, "/releaseId", "ticketId and releaseId are mutually exclusive")
 	}
 	rc.AttemptID = r.Field("attemptId").StringOrNull((*wire.Reader).Identifier)
 	rc.Generation = r.Field("generation").SizeOrNull()

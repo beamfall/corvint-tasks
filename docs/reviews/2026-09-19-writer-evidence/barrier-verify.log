@@ -1,0 +1,16 @@
+GOTOOLCHAIN=local go test -count=1 ./...
+?   	github.com/Beamfall/corvint-tasks/cmd/corvint-tasks	[no test files]
+ok  	github.com/Beamfall/corvint-tasks/internal/archive	23.661s
+ok  	github.com/Beamfall/corvint-tasks/internal/authority	137.275s
+ok  	github.com/Beamfall/corvint-tasks/internal/cli	9.877s
+?   	github.com/Beamfall/corvint-tasks/internal/fixture	[no test files]
+ok  	github.com/Beamfall/corvint-tasks/internal/intent	24.560s
+ok  	github.com/Beamfall/corvint-tasks/internal/journal	6.043s
+ok  	github.com/Beamfall/corvint-tasks/internal/mutation	1.654s
+ok  	github.com/Beamfall/corvint-tasks/internal/safeopen	0.539s
+ok  	github.com/Beamfall/corvint-tasks/internal/snapshot	5.324s
+ok  	github.com/Beamfall/corvint-tasks/internal/store	23.980s
+ok  	github.com/Beamfall/corvint-tasks/internal/ticket	1.203s
+ok  	github.com/Beamfall/corvint-tasks/internal/transaction	6.048s
+ok  	github.com/Beamfall/corvint-tasks/internal/wire	0.721s
+GOTOOLCHAIN=local go vet ./...

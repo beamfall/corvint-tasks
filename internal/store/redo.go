@@ -9,6 +9,7 @@ import (
 	"github.com/Beamfall/corvint-tasks/internal/authority"
 	"github.com/Beamfall/corvint-tasks/internal/intent"
 	"github.com/Beamfall/corvint-tasks/internal/snapshot"
+	"github.com/Beamfall/corvint-tasks/internal/transaction"
 	"github.com/Beamfall/corvint-tasks/internal/wire"
 )
 
@@ -32,6 +33,34 @@ func redoPending(repo *intent.Repository, session *authority.Session) (bool, err
 	raw, found, err := receiptBytes(repo, last+1)
 	if err != nil || !found {
 		return false, err
+	}
+	// Only the terminal, fully validated PRE_OR_POST result authorizes redo.
+	proof, auditErr := journalReader(repo, head).Audit("intent/queue.json")
+	if wire.CodeOf(auditErr) != wire.CodeRedoPending || proof == nil || !proof.Pending || proof.StructuralConsistency != "CONSISTENT" || proof.ProjectionAgreement != "PRE_OR_POST" {
+		if auditErr != nil {
+			return false, auditErr
+		}
+		return false, wire.Errorf(wire.CodeSnapshotMoved, "receipts", "pending receipt observation changed")
+	}
+	if proof.StagingPresent {
+		return false, wire.Errorf(wire.CodeUnsupported, "staging", "active staging recovery is not implemented")
+	}
+	queue, err := intent.DecodeQueue(proof.Records["intent/queue.json"].Raw)
+	if err != nil {
+		return false, err
+	}
+	if err = requireBranch(repo, queue.IntentBranch); err != nil {
+		return false, err
+	}
+	if err = bindObservation(repo, proof.Identity, transaction.Mutate); err != nil {
+		return false, err
+	}
+	current, found, err := receiptBytes(repo, last+1)
+	if err != nil {
+		return false, err
+	}
+	if !found || wire.Sum(current) != proof.LastReceiptSha256 || wire.Sum(raw) != proof.LastReceiptSha256 {
+		return false, wire.Errorf(wire.CodeSnapshotMoved, "receipts", "validated pending receipt changed")
 	}
 	receipt, err := snapshot.DecodeReceipt(raw)
 	if err != nil {
@@ -188,7 +217,14 @@ func readHead(repo *intent.Repository) (*snapshot.Head, error) {
 	if err != nil {
 		return nil, err
 	}
-	return snapshot.DecodeHead(raw)
+	head, err := snapshot.DecodeHead(raw)
+	if err != nil {
+		return nil, err
+	}
+	if head.PrimaryWorktree != repo.PrimaryWorktree {
+		return nil, wire.Errorf(wire.CodeUnsupported, "head.json", "primary worktree differs; relocation unsupported")
+	}
+	return head, nil
 }
 
 func receiptPath(seq uint64) string {

@@ -1,0 +1,12 @@
+Focused overlay execution, 2026-09-19; original source unchanged.
+Command: GOTOOLCHAIN=local go test -count=1 -overlay=/private/tmp/corvint-tasks-audit-20260919/reviewer/overlay.json ./internal/store -run '^TestAudit' -v
+Exit: 1. Duration reported by go test: 1.265s. Toolchain: go1.27.1 darwin/arm64.
+TestAuditProjectionEditNotAdopted FAIL: divergent title silently adopted in receipt=000000000003.json resulting revision=2
+TestAuditWrongBranchRefusesMutation FAIL: queue.intentBranch=main, HEAD=other yet receipt=000000000002.json
+TestAuditAllBarrierRefusesMutation FAIL: scope=ALL yet receipt=000000000002.json
+TestAuditInvalidInitDoesNotStrandStore FAIL: invalid init=UNAUTHORIZED then valid init=BLOCKED receipt="" detail=""
+TestAuditCreateReplayPreservesTicketID FAIL: first ticket="ticket:acme:main:AT-0002", replay ticket=""
+TestAuditUnsupportedStoreStatesRefuseMutation/version PASS: no completed mutation with unsupported VERSION
+TestAuditUnsupportedStoreStatesRefuseMutation/restore-marker FAIL: restore-marker accepted receipt=000000000002.json
+TestAuditUnsupportedStoreStatesRefuseMutation/primary-mismatch FAIL: primary-mismatch accepted receipt=000000000002.json
+This compact transcript records the actual first run's output; no repeat execution.

@@ -40,6 +40,8 @@ type Outcome struct {
 	Replayed                    bool
 	ResultingRevision           *wire.Count
 	ResultingAcceptanceRevision *wire.Count
+	ReleaseID                   *string
+	ResultingReleaseRevision    *wire.Count
 	ReceiptSeq                  *wire.Size
 	Codes                       []string
 }
@@ -54,6 +56,10 @@ func (o *Outcome) Value() wire.Value {
 	v.Set("replayed", wire.Bool(o.Replayed))
 	v.Set("resultingRevision", countOrNull(o.ResultingRevision))
 	v.Set("resultingAcceptanceRevision", countOrNull(o.ResultingAcceptanceRevision))
+	if o.ReleaseID != nil {
+		v.Set("releaseId", wire.String(*o.ReleaseID))
+		v.Set("resultingReleaseRevision", countOrNull(o.ResultingReleaseRevision))
+	}
 	if o.ReceiptSeq == nil {
 		v.Set("receiptSeq", wire.Null())
 	} else {
@@ -82,8 +88,14 @@ func DecodeOutcome(data []byte) (*Outcome, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, ok := v.Obj.Get("releaseId"); !ok {
+		v.Obj.Set("releaseId", wire.Null())
+	}
+	if _, ok := v.Obj.Get("resultingReleaseRevision"); !ok {
+		v.Obj.Set("resultingReleaseRevision", wire.Null())
+	}
 	r := wire.NewReader(v, "/")
-	r.Closed("profile", "requestId", "outcome", "replayed", "resultingRevision", "resultingAcceptanceRevision", "receiptSeq", "codes")
+	r.Closed("profile", "requestId", "outcome", "replayed", "resultingRevision", "resultingAcceptanceRevision", "releaseId", "resultingReleaseRevision", "receiptSeq", "codes")
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
@@ -96,6 +108,12 @@ func DecodeOutcome(data []byte) (*Outcome, error) {
 	o.Replayed = r.Field("replayed").Bool()
 	o.ResultingRevision = r.Field("resultingRevision").CountOrNull()
 	o.ResultingAcceptanceRevision = r.Field("resultingAcceptanceRevision").CountOrNull()
+	if value, ok := v.Obj.Get("releaseId"); ok {
+		o.ReleaseID = wire.NewReader(value, "/releaseId").LabelOrNull()
+	}
+	if value, ok := v.Obj.Get("resultingReleaseRevision"); ok {
+		o.ResultingReleaseRevision = wire.NewReader(value, "/resultingReleaseRevision").CountOrNull()
+	}
 	o.ReceiptSeq = r.Field("receiptSeq").SizeOrNull()
 	o.Codes = nonNil(r.Field("codes").Strings(-1, false, func(c *wire.Reader) string {
 		s := c.String()
@@ -112,6 +130,17 @@ func DecodeOutcome(data []byte) (*Outcome, error) {
 	}
 	if o.Outcome != OutcomeCompleted && (o.ResultingRevision != nil || o.ResultingAcceptanceRevision != nil) {
 		return nil, wire.Errorf(wire.CodeMalformed, "/resultingRevision", "a refused outcome carries no resulting revision")
+	}
+	ticketShape := o.ResultingRevision != nil || o.ResultingAcceptanceRevision != nil
+	releaseShape := o.ReleaseID != nil || o.ResultingReleaseRevision != nil
+	if (o.ReleaseID == nil) != (o.ResultingReleaseRevision == nil) {
+		return nil, wire.Errorf(wire.CodeMalformed, "/releaseId", "release outcome carries both release identity fields or neither")
+	}
+	if ticketShape && releaseShape {
+		return nil, wire.Errorf(wire.CodeMalformed, "/releaseId", "ticket and release result fields are mutually exclusive")
+	}
+	if o.Outcome != OutcomeCompleted && releaseShape {
+		return nil, wire.Errorf(wire.CodeMalformed, "/releaseId", "a refused outcome carries no release result")
 	}
 	return o, nil
 }

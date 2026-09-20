@@ -1,0 +1,23 @@
+{
+  "result": "PASS",
+  "steps": 16,
+  "fixture": "/private/tmp/corvint-tasks-build-20260919/reconcile-smoke-0a2tw0mv",
+  "ticket": "ticket:acme:main:AT-0002",
+  "headSeq": "5",
+  "qualification": "NOT_OBSERVED",
+  "examples": {
+    "policy.json": "4f16eade5137a72841f42048ac0e5163c32b9f20696357cf8b966a167dbfe442",
+    "create.json": "d456c8145acc5c453ba8820fc5731339d2d23c7886ed99522174c3b7448f4274",
+    "queue.json": "167c7d1839ac43d5efb33c142e2337ae7752491075632abde788c9d0fc61cfae"
+  },
+  "scenarios": [
+    "init/create/exact retry",
+    "malformed edit refuses strict audit",
+    "canonical inspection",
+    "KEEP with preserved file and evidence",
+    "KEEP replay",
+    "ADOPT stdin and replay",
+    "subsequent mutation",
+    "explicit unavailable runtime commands"
+  ]
+}

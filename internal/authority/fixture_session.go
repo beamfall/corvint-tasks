@@ -54,6 +54,7 @@ const (
 	fixturePolicy
 	fixtureImportMap
 	fixtureTicket
+	fixtureRelease
 )
 
 type fixtureTarget struct {
@@ -113,6 +114,8 @@ func fixtureDirectory(key string) (parent, name string, ok bool) {
 		return "state", key, true
 	case "tickets":
 		return "intent", "tickets", true
+	case "releases":
+		return "intent", "releases", true
 	}
 	if strings.HasPrefix(key, "requests/") && fixtureHex(strings.TrimPrefix(key, "requests/"), 2) {
 		return "requests", strings.TrimPrefix(key, "requests/"), true
@@ -189,6 +192,12 @@ func (t fixtureTarget) location() (string, string, int, error) {
 		if err == nil && strings.HasSuffix(name, ".json") {
 			return "tickets", name, wire.MaxTicketFileBytes, nil
 		}
+	case fixtureRelease:
+		id := strings.TrimSuffix(name, ".json")
+		_, err := wire.ParseLabel("", id)
+		if err == nil && strings.HasSuffix(name, ".json") {
+			return "releases", name, wire.MaxReleaseFileBytes, nil
+		}
 	}
 	return "", "", 0, fixtureRefused
 }
@@ -205,7 +214,7 @@ func fixtureStageLimit(slot fixtureSlot, role fixtureRole) (int, error) {
 		fixtureVersion: len("taskman-state/0\n"), fixtureHead: wire.MaxJournalHeadBytes,
 		fixtureBarrier: wire.MaxBarrierBytes, fixtureReservations: wire.MaxReservationSetBytes,
 		fixtureQueue: wire.MaxQueueFileBytes, fixturePolicy: wire.MaxPolicyFileBytes,
-		fixtureImportMap: wire.MaxImportMapBytes, fixtureTicket: wire.MaxTicketFileBytes,
+		fixtureImportMap: wire.MaxImportMapBytes, fixtureTicket: wire.MaxTicketFileBytes, fixtureRelease: wire.MaxReleaseFileBytes,
 	}
 	limit, ok := limits[role]
 	if !ok {
@@ -250,7 +259,7 @@ func newFixtureSession(repo *intent.Repository, lock *Lock) (_ *fixtureSession, 
 	if err = s.retain("primary", "", "", root); err != nil {
 		return nil, err
 	}
-	for _, key := range []string{"common", "state", "staging", "receipts", "evidence", "pinned", "requests", "intent", "tickets"} {
+	for _, key := range []string{"common", "state", "staging", "receipts", "evidence", "pinned", "requests", "intent", "tickets", "releases"} {
 		if err = s.pinExisting(key); err != nil {
 			return nil, err
 		}
@@ -695,7 +704,7 @@ func (s *fixtureSession) link(stage *fixtureStage, t fixtureTarget) error {
 func (s *fixtureSession) replace(stage *fixtureStage, t fixtureTarget, expected *wire.Digest) error {
 	switch t.role {
 	case fixtureHead, fixtureBarrier, fixtureReservations:
-	case fixtureQueue, fixturePolicy, fixtureImportMap, fixtureTicket, fixtureVersion:
+	case fixtureQueue, fixturePolicy, fixtureImportMap, fixtureTicket, fixtureRelease, fixtureVersion:
 		// An intent projection is replaced only under an explicit expected
 		// digest. The §5.2 redo rule decides what the destination must
 		// currently hold, and an unconditional overwrite of a projection

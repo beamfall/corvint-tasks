@@ -9,9 +9,11 @@ findings were repaired and passed fresh review. See
 [fixture foundation evidence](reviews/2026-09-06-fixture-foundation-integration.md).
 Reviewed J3-02 native read support also passed its parent gate and fresh review
 ([evidence](reviews/2026-09-06-j3-02-integration.md)). Decision 0002 selects fixture-only
-first delivery. J3-03/04 test-owned integration is authored; its combined parent gate and
-fresh review remain pending ([builder evidence](reviews/2026-09-06-j3-fixture-integration-builder.md)). No callable
-journal writer, mutation CLI, reservation/process runtime or performance qualification exists.
+first delivery. J3-03/04 passed its combined gate and fresh review
+([delivery evidence](reviews/2026-09-06-fixture-delivery.md)). Decisions 0003/0004 delivered
+callable fixture initialization and all fourteen ticket mutations. The 2026-09-19 writer
+repair is tracked in [repair evidence](reviews/2026-09-19-writer-repair.md). Reservations,
+process runtime, real-queue admission and performance qualification remain unbuilt or unqualified.
 **Binary:** `corvint-tasks`, native Go 1.27.1, standard library only
 **Wire profiles frozen here:** `taskman-queue/0`, `taskman-policy/0`, `taskman-ticket/0`,
 `taskman-mutation/0`, `taskman-outcome/0`, `taskman-receipt/0`, `taskman-journal-head/0`,
@@ -32,9 +34,8 @@ TCP-01 digest preimages frozen in §3.1 as an implementation detail; gates remai
 ## Agent digest
 - Claim: Freezes the on-disk schemas, numeric limits, lock/commit/recovery protocol, transition
   table, acceptance tables and adoption protocol that TCP-01..09 implement.
-- Status: accepted intent; experimental fixture support through J3-02 passed parent gates and fresh reviews; J3-03/04 combined validation is pending.
-- Exists: this contract, `docs/ROADMAP.md`, decision 0001, the frozen Corvint context copies,
-  experimental TCP-01 Go source/tests and TCP-02 authority primitives (see `AGENTS.md` state).
+- Status: accepted intent; fixture support through J3-03/04 passed parent gates and fresh reviews; callable init and ticket mutations delivered under decisions 0003/0004. TCP-02 remains incomplete.
+- Exists: this contract, `docs/ROADMAP.md`, decisions 0001..0004, experimental TCP-01/TCP-02 Go source/tests and callable fixture writer. The frozen source-copy paths were missing at the 2026-09-19 audit; their recovery remains required.
 - Blocked on: TCP-01 and TCP-02 implementation; Corvint-side amendment record (§10 U1).
 - Read next: §2 identity and encoding; §3 records; §5 storage protocol; §6 transitions; §7
   acceptance tables; §9 slices and ownership.
@@ -500,10 +501,10 @@ assumed or invented; no verb below renders attempt, receipt, config, plan or rep
 Witnesses: `TestTMV0008_AS08_Pagination`, `TestTMV0008_AS08_TicketSearch`,
 `TestTMV0008_AS08_TicketExport`, `TestTMV0008_AS08_RoadmapAndGates`,
 `TestTMV0008_AS07_ReadsLeaveStoreByteIdentical` (NOT_RUN until a verify run classifies them).
-`config show`, `plan preview`, `receipt show|audit|replay` and `attempt show` answer `NOT_RUN`
+`config show`, `plan preview`, `receipt show|replay` and `attempt show` answer `NOT_RUN`
 until the journal, pinned documents and plans exist (TCP-02+). The fourteen `ticket` mutation
 verbs answered `NOT_RUN` until TCP-02b wired them to the journal (§5.7.2); the administrative
-verbs still do.
+verbs still do except the delivered fixture `init`, reconciliation, `pause` and `unpause`.
 
 Read/archive repair witnesses: `TestTMV0008_AS36_ShowRetriesDiscardPriorAttempt` proves
 callback-owned output is reset per snapshot attempt. `TestTMV0022_AS09_ContentAddressedNames`
@@ -513,6 +514,103 @@ claims. `TestTMV0022_AS09_TerminalReadError` requires actual EOF after the end m
 `TestTMV0022_AS09_PartialDelivery` covers an accepted prefix followed by a destination error.
 `TestTMV0022_AS10_EncodedStreamLimit` and `TestTMV0022_AS10_EncodedLimitIncludesPAX`
 prove the complete encoded-stream bound with reduced internal test limits.
+
+**Native receipt audit (2026-09-19).** `receipt audit` accepts no arguments. It validates the
+complete native journal through J1 under the TM-V0-008 outer snapshot protocol. Its successful
+`items` contains exactly one object with `headSeq:Size`, `lastReceiptSha256:Digest`,
+`structuralConsistency`, `projectionAgreement`, `semanticCoverage`, `historicalAcceptance`,
+`actorAuthentication`, `liveness`, `runtimeQualification` and `stagingPresent:boolean`.
+String axes are the native audit's reported values: CONSISTENT, AGREES, KNOWN_CODECS or UNKNOWN
+for codec coverage, and NOT_OBSERVED for historical acceptance, actor authentication, liveness
+and runtime qualification. These last axes are never inferred from structural consistency.
+The item is emitted only after both audit and outer snapshot succeed with equal head and intent
+identities; `untrusted:[]`, `mutation:null`, `page:null`. Pending, malformed, forked, diverged or
+moved observations produce no item and preserve the existing failure code/outcome mapping.
+Read-only audit never repairs or replays. Witnesses `TestTMV0008_AS07_ReceiptAuditReportsBoundedEvidence`,
+`TestTMV0008_AS11_ReceiptAuditRefusesWithoutRecovery`,
+`TestTMV0008_AS07_ReceiptAuditUsageAndUninitialized`, and
+`TestTMV0008_AS36_ReceiptAuditDiscardsMovedResults`.
+
+**Explicit fixture reconciliation (decision 0007, 2026-09-19).**
+`reconcile inspect <ticket-id>` completes one bounded native journal audit permitting divergence
+only of that ticket projection, including present-empty or malformed bytes. All other projections
+remain strict. Successful `items` contains one object: `ticketId`, `canonicalRecordSha256:Digest`,
+`canonicalRecord` (the canonical ticket JSON), `projectionAgreement:"ALL_EXCEPT_TARGET_AGREE"`,
+`historicalAcceptance`, `actorAuthentication`, `liveness`, `runtimeQualification`. The last four
+axes remain NOT_OBSERVED. `untrusted:["UNTRUSTED_QUEUE_DATA"]`, `mutation:null`, `page:null`;
+snapshot head, intent identity and barrier derive from the same complete audit. Errors emit no
+item. This read takes no lock and never repairs, initializes or redoes state. A terminal receipt
+digest is not a canonical ticket-record digest.
+
+The closed write syntax is `reconcile intent --target ID --request-id ID --file PATH` plus exactly
+one of `--keep-journal --canonical-sha256 DIGEST` or `--adopt-file`, optionally
+`--role OWNER|OPERATOR` (default OWNER). `--file -` reads bounded stdin; filesystem input is
+bounded and no-follow. Duplicate, unknown and inapplicable flags refuse. File paths are explicit
+operator arguments, never derived from ticket prose. Before choosing, inspect the canonical
+record/hash and preserve an immutable copy of the edited projection outside `.taskman`; provide
+that copy as `--file`, retaining it and the KEEP digest for exact retries. The supplied original
+bytes must match the current projection for a fresh transaction. A different choice under the
+same request ID conflicts; exact retries can replay after later intent changes and retain the
+original ticket ID. Existing §3.3/§5.5 acceptance and digest rules are unchanged.
+
+Only settled fixture queues are supported. Full request lookup precedes fresh planning; fresh
+planning uses journal-derived canonical records and a second complete audit binds head, inventory
+and intent immediately before apply. Pending receipts refuse without recovery. Active staging
+refuses fresh reconciliation while validated read-only replay remains available. ALL and ADMISSION permit this explicit reconciliation; branch, primary identity,
+VERSION and RESTORE_INCOMPLETE guards still apply. Fresh ticket mutation and pending redo now
+also refuse active staging instead of treating free-looking slots as a recovery grant.
+KEEP publishes discarded evidence before receipt link-in even when the model represents it as
+an evidence POST, preserving immutable destination semantics and the existing capacity accounting.
+
+Witnesses: `TestTMV0007_AS35_ReconciliationCanonicalReadIsTargetScoped`,
+`TestTMV0007_AS35_ReconciliationReadRefusesUnprovedHistory`,
+`TestTMV0007_AS35_NativeKeepThenMutation`, `TestTMV0007_AS35_NativeAdoptThenMutation`,
+`TestTMV0007_AS35_NativeReconcileRefusalsPreserveInput`,
+`TestTMV0009_AS11_NativeReconcileRefusesPending`, `TestTMV0009_AS11_ActiveDescriptorBlocksFreshWriters`,
+`TestTMV0009_AS11_KeepEvidencePrecedesCommitAndSurvivesReturnedFault`,
+`TestTMV0016_AS27_ReconciliationUnderBarriersAndNoChange`,
+`TestTMV0007_AS35_CLIInspectReconcileRetryWorkflow`,
+`TestTMV0007_AS35_CLIReconcileInputFailuresWriteNothing`,
+`TestTMV0007_AS35_InapplicableReconcileFlagRefusesBeforeInput`,
+`TestTMV0008_AS35_CLIReconcileInspectFailureHasNoItem`,
+`TestTMV0016_AS27_ReconcileInspectReportsJournalledBarrier`.
+Returned-fault ordering/cleanup evidence is not process-crash or power-loss qualification.
+
+**Settled fixture barriers (decision 0008, 2026-09-19).**
+`pause --request-id ID [--role OWNER|OPERATOR]` and
+`unpause --request-id ID [--role OWNER|OPERATOR]` expose only the existing §5.5 templates;
+default role OWNER. Flags are closed; missing, duplicate, unknown and invalid-role arguments
+refuse before store access. Queue identity is read from the head and revalidated under lock.
+PAUSE creates ADMISSION/OPERATOR; it accepts no arbitrary scope or reason. Existing matching
+pause and absent unpause return unrecorded NoChange. Exact recorded retries replay their original
+outcome; reusing a request ID for another actor, role or operation conflicts. Administrative
+results have no ticket or resulting revisions. All qualification coverage remains NOT_OBSERVED.
+
+Fresh PAUSE requires complete projection agreement. Fresh UNPAUSE uses a complete settled
+`Reader.BarrierRemoval` audit that reports `TICKETS_NOT_COMPARED`: canonical ticket records are
+fully validated and each must have a present regular physical projection, while unrelated ticket
+bytes may differ, including present-empty/malformed D. Extra/missing tickets, queue/policy drift
+and private corruption still refuse. Neither this value-copy exception nor canonical records
+change ordinary audit, reconciliation or request lookup behavior. A second complete audit binds
+head, inventory and intent immediately before effects. ALL exempts only UNPAUSE (and the already
+specified reconciliation operations); branch equality is not required for these non-intent posts.
+
+Barrier deletion is the receipt's existing paired non-null pre/null post: publish receipt, ordinary
+posts, exact-pre-digest barrier unlink plus parent sync, then head. The narrow session API can
+remove only barrier.json. A deletion failure stops before head and preserves a third-value barrier.
+Pending receipts refuse without redo; active staging refuses fresh operations. Postcommit UNPAUSE
+failure remains pending and unsupported by **all current callable recovery paths**, including
+ordinary ticket mutation redo, which refuses null posts. This preview does not qualify recovery,
+process interruption, power loss, hostile editors, liveness or runtime execution.
+
+Witnesses: `TestTMV0016_AS27_NativeBarrierCycleAndReplay`,
+`TestTMV0016_AS27_UnpausePreservesMultipleDivergentTickets`,
+`TestTMV0016_AS27_UnpauseALLAndBranchIndependence`,
+`TestTMV0009_AS11_BarrierPublicationReturnedFaults`,
+`TestTMV0009_AS11_ChangedBarrierAfterReceiptStopsBeforeHead`,
+`TestTMV0009_AS11_BarrierRefusalsPreserveStore`,
+`TestTMV0016_AS27_BarrierRemovalAuditRetainsStrictBoundaries`,
+`TestTMV0016_AS27_CLIBarrierWorkflow`, and `TestTMV0016_AS27_CLIBarrierClosedArguments`.
 
 ### 3.4 Private state (journal), outside the repository tree
 
@@ -1435,7 +1533,7 @@ payload as canonical JSON, `--request-id` is the idempotency key, and `--target`
 `--expected-revision` names the record for every verb except `CREATE`. Because the request digest
 is the digest of the envelope bytes, `--issued-at` lets a retry reproduce the original envelope
 and replay; without it each invocation issues a new request. A `CREATE` that allocates a serial
-reports the ticket id it allocated, which is the only place a caller can learn it.
+reports the ticket id it allocated; an exact replay returns that same ID from its validated original receipt, with no new receipt.
 
 Witnesses: `TestTMV0005_AS02_CreateCommitsATicket`,
 `TestTMV0005_AS02_RefineChainsFromTheCommittedRevision`,
@@ -1448,12 +1546,56 @@ Witnesses: `TestTMV0005_AS02_CreateCommitsATicket`,
 `TestTMV0008_AS07_MutationsRefuseOnAnUninitializedStore`.
 
 Held: attempt liveness is answered by the zero-attempt oracle, which is sound only while no
-runtime exists to start an attempt; `reconcile intent`, the administrative verbs and
-`archive restore` remain unwired.
+runtime exists to start an attempt; the remaining administrative verbs and `archive restore`
+remain unwired. Settled fixture intent reconciliation is specified below under decision 0007.
 
 Not delivered here: crash recovery through the staging descriptor (`active.json`), which belongs
-with `reconcile`; every mutation verb other than `init`; and any non-fixture queue, which still
+with `reconcile`; administrative mutations other than `init`; and any non-fixture queue, which still
 requires the §7.4 cutover record and a `QUALIFICATION` receipt.
+
+#### Writer repair boundary (2026-09-19)
+
+Before recovery, the callable ticket writer binds the envelope actor ID/role to the invoking
+local-operator binding and refuses unsupported VERSION, any RESTORE_INCOMPLETE marker,
+primary-worktree mismatch and an ALL barrier. ADMISSION permits ticket mutations. These
+checks do not authenticate the local operator or qualify a runtime.
+
+A pending receipt authorizes recovery only after the complete native journal audit returns
+its terminal REDO_PENDING result with CONSISTENT structure and PRE_OR_POST projections.
+The writer binds the audited head, intent tree and terminal receipt digest before redo;
+earlier-history corruption, foreign scope, decreasing generation and broken request bindings
+cause no recovery writes. Other partial audit results never authorize a write or replay.
+
+Settled request lookup validates the journal and private projections while permitting stable
+intent divergence. An exact replay or request-ID conflict precedes fresh branch/projection
+requirements. Original ticket identity comes from that same validated receipt walk. Fresh
+requests obtain canonical queue, policy and ticket bytes from a strict journal audit, then
+bind them to the model inventory. This conservatively refuses the whole fixture queue on
+any intent divergence until reconciliation is wired. Request and intent selections have
+separate bounded reads; no existing aggregate limit is raised.
+
+INIT validates its model under the exclusive lock before creating state directories, and
+checks for an intervening initializer. INIT and fresh mutations observe the primary
+common-directory HEAD through a bounded no-follow read. A detached, missing, unreadable or
+wrong primary branch refuses; a linked caller's own HEAD cannot substitute. The writer
+rechecks the branch and captured intent/head before effects. These cooperative observations
+do not qualify atomic CAS against hostile concurrent editors. Interrupted genesis and
+staging-descriptor recovery remain held.
+
+Named regressions (the test identifiers carry TM-V0 and AS traceability):
+`TestTMV0007_AS35_WriterRejectsProjectionDrift`,
+`TestTMV0007_AS35_WriterObservesPrimaryBranch`,
+`TestTMV0007_AS29_LinkedCallerUsesPrimaryHEAD`,
+`TestTMV0009_AS11_WriterGuardsBeforeRedo`,
+`TestTMV0009_AS11_RedoRequiresCompleteJournalProof`,
+`TestTMV0009_AS11_InvalidInitLeavesCorrectableInput`,
+`TestTMV0009_AS11_InvalidInitRoleThenRetry`,
+`TestTMV0006_AS03_ReplayPreservesIdentityAndAllowsStableDivergence`,
+`TestTMV0006_AS03_ActorBindingBeforeReplayAndRedo`,
+`TestTMV0006_AS03_ForgedRequestNeverReplays`,
+`TestTMV0016_AS27_AdmissionBarrierAllowsNativeMutation`, and strengthened
+`TestTMV0016_AS27_BarrierTemplatesExemptionsAndNoChange` /
+`TestTMV0006_AS03_TicketCreateRetryReplays`.
 
 ### 5.2 Transaction and commit points
 
@@ -1904,8 +2046,9 @@ inventory/cost equality, and componentwise conservative transient domination ret
 unsynced name/shrink debt. Returned faults execute Go cleanup; no crash child was used.
 Process-interruption and physical power-loss evidence are NOT_PRODUCED. Twelve-receipt,
 128-entry-per-directory, 4-MiB fixture bounds are not general journal qualification. Callable
-writer/issuer/admin binding, hostile-editor CAS, CLI mutation, live runtime/escrow, real queues,
-restore and GP remain held. Native Linux execution and performance are NOT_RUN. TCP-02
+writer qualification, authenticated issuer/admin binding, hostile-editor CAS, live runtime/escrow,
+real queues, restore and GP remain held. Decisions 0003/0004 subsequently released the callable
+fixture writer and ticket CLI within their narrower local-operator premise. Native Linux execution and performance are NOT_RUN. TCP-02
 remains incomplete; read support and fixture transactions grant no durable-writer authority.
 
 ## 6. Transition and recovery table
@@ -2367,8 +2510,7 @@ evidence of absent contention. Nothing in this section is measured at this revis
   cannot be written from this repository. Decision 0001 accepts §8 for this repository; the
   Corvint repository still needs its own amendment commit.
 - U2: TCP-09 (Beamfall adapter and recorder) has no owner; it does not block Corvint-only serial use.
-- U3: The Go 1.27.0 gate and `Makefile` are written but not executed here; `make verify` fails
-  closed until source exists.
+- U3: Go 1.27.1 `make verify` executes format, all tests and vet. The 2026-09-19 baseline passed; writer-repair validation is recorded separately. Passing this gate does not qualify G1..G6 or GP.
 - U4: Darwin `kern.proc.pid` start-time extraction and Linux `btime` parsing are asserted
   stdlib-feasible; TCP-02 must prove it with a synthetic process-table fixture.
 - U5: resolved in R2. The coordinator computed SHA-256 over the six frozen context files and
@@ -2428,6 +2570,14 @@ UNPUBLISHED, UNRESOLVED_FINDING, UNSUPPORTED, UNSUPPORTED_FILESYSTEM, UNSUPPORTE
 | 025 | 020 | §7 | all | G0..G6, GP |
 | 026 | 011, 014 | §5 | — | AS-17, AS-28 |
 | 027 | 020 (evidence rule); owner steering 2026-09-06 | — | 03, 04, 06, 07 | AS-31, AS-32 (GP) |
+| 028 | owner decision 0009 | ATM-V0-028 | 02 | AS-38 |
 
-Every evidence cell is NOT_RUN. TCP-01 tests are authored but have not been executed; no other
-implementation exists at this revision.
+The table maps obligations to slices and acceptance scenarios. Executed support/fixture evidence is recorded in `docs/reviews/`; unimplemented runtime and qualification scenarios remain NOT_RUN. A passed package or repository gate does not fill a qualification cell.
+
+### TM-V0-028 — fixture release control
+
+`taskman-release/0` records live at `.taskman/releases/<release-id>.json` under the release-count and file-byte limits. Definitions name ordered predecessors, scoped tickets, acceptance criteria, and required policy gates. Candidate capture, attestations, readiness, and promotion follow decision 0009. Required gates are derived from the current policy's required gates union the release's explicit gates; every release criterion must be covered by passing, compatible current-candidate evidence. Readiness is `BLOCKED`, `UNKNOWN`, or `READY_ATTESTED`. External/manual evidence is non-native, and native gate execution is `NOT_RUN`. Release mutation is fixture-only and journaled; promotion is local and grants no publication or real-queue authority.
+
+Definitions reject unknown required gate IDs before commit. Attestations must supply the current candidate digest; the writer never rebinds stale evidence. Promotion binds only passing, compatible evidence for that candidate. Release CLI payloads accept insignificant JSON whitespace (including stdin) and derive authorization from parsed provenance. Source identity includes file mode and type plus file contents or symlink target. Every writer carries the complete canonical ticket and release inventory.
+
+AS-38 proves two ordered releases, candidate and predecessor binding, missing-gate blocking, compatible attestation readiness, promotion, invalidation by source/ticket/policy/predecessor change (including chmod), policy removal, rejection of unknown gates and stale attestations, manual payload routing, ticket/barrier/reconciliation interoperability, durable replay and pending-receipt redo, and refusal outside the fixture boundary. Active staging recovery remains NOT_RUN.

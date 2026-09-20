@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"strings"
 	"time"
@@ -121,6 +123,10 @@ func parseMutateFlags(cmd []string, args []string) (mutateFlags, *wire.Result) {
 }
 
 func readPayload(env Env, f mutateFlags) (wire.Value, error) {
+	return readPayloadWithWhitespace(env, f, false)
+}
+
+func readPayloadWithWhitespace(env Env, f mutateFlags, compact bool) (wire.Value, error) {
 	raw := f.payload
 	if f.payloadFromStdin {
 		data, err := io.ReadAll(io.LimitReader(env.Stdin, int64(wire.MaxTicketFileBytes)+1))
@@ -134,6 +140,13 @@ func readPayload(env Env, f mutateFlags) (wire.Value, error) {
 	}
 	if strings.TrimSpace(raw) == "" {
 		return wire.Value{}, wire.Errorf(wire.CodeMalformed, "payload", "no payload: pass --payload or --payload-stdin (canonical JSON: keys sorted, no extra whitespace)")
+	}
+	if compact {
+		var buf bytes.Buffer
+		if err := json.Compact(&buf, []byte(raw)); err != nil {
+			return wire.Value{}, wire.Errorf(wire.CodeMalformed, "payload", "invalid JSON: %v", err)
+		}
+		raw = buf.String()
 	}
 	// The payload is a fragment, not a file: supply the framing LF the parser
 	// requires. Canonicality is still enforced on the whole envelope.
@@ -183,6 +196,7 @@ func mutateResult(cmd []string, report *store.Report) *wire.Result {
 	o.Set("receipt", wire.String(report.Receipt))
 	o.Set("replayed", wire.Bool(report.Outcome.Replayed))
 	o.Set("ticketId", wire.String(report.Ticket))
+	o.Set("releaseId", wire.String(report.Release))
 	o.Set("resultingRevision", nullableCount(report.Outcome.ResultingRevision))
 	o.Set("resultingAcceptanceRevision", nullableCount(report.Outcome.ResultingAcceptanceRevision))
 	o.Set("actorAuthentication", wire.String(report.Coverage.ActorAuthentication))

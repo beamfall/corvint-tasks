@@ -62,6 +62,7 @@ func TempRepo(t *testing.T) *Repo {
 	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
 		t.Fatalf("mkdir .git: %v", err)
 	}
+	Write(t, filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"))
 	if _, err := wire.ParsePathText("", root); err != nil {
 		t.Fatalf("temp path %q is not a valid head.primaryWorktree PathText: %v", root, err)
 	}

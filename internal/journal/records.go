@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Beamfall/corvint-tasks/internal/intent"
+	"github.com/Beamfall/corvint-tasks/internal/release"
 	"github.com/Beamfall/corvint-tasks/internal/snapshot"
 	"github.com/Beamfall/corvint-tasks/internal/ticket"
 	"github.com/Beamfall/corvint-tasks/internal/wire"
@@ -65,6 +66,9 @@ func (r Reader) walk(o *observation, selected map[string]bool, request string, l
 		}
 	}
 	result.Pending = count == headSeq+1
+	if result.Pending && (r.divergentIntent != "" || r.unpauseTickets) {
+		return result, wire.Errorf(wire.CodeRedoPending, "receipts", "this observation requires a settled journal")
+	}
 	canonical := map[string]latest{}
 	var prev *wire.Digest
 	var generation uint64
@@ -113,7 +117,7 @@ func (r Reader) walk(o *observation, selected map[string]bool, request string, l
 			if strings.HasPrefix(p.Path, "requests/") && prior.seq != "" {
 				return result, wire.Errorf(wire.CodeJournalForked, p.Path, "request ID occurs more than once in retained history")
 			}
-			if _, ok := canonical[p.Path]; !ok && len(canonical) >= lim.scan+intent.MaxIntentRootEntries+wire.MaxTicketsPerQueue {
+			if _, ok := canonical[p.Path]; !ok && len(canonical) >= lim.scan+intent.MaxIntentRootEntries+wire.MaxTicketsPerQueue+wire.MaxReleasesPerQueue {
 				return result, wire.Errorf(wire.CodeLimitExceeded, p.Path, "latest metadata exceeds store scan bound")
 			}
 			post, err := r.postBytes(p)
@@ -164,6 +168,9 @@ func (r Reader) walk(o *observation, selected map[string]bool, request string, l
 				boundRequest = req
 				if req.Entry.RequestID == request {
 					result.request = req
+					if rc.TicketID != nil {
+						result.requestTicket = rc.TicketID.Raw
+					}
 				}
 			}
 			canonical[p.Path] = latest{seq: rc.Seq, digest: p.Sha256, pendingPre: rc.Pre[j].Sha256, pending: seq > headSeq}
@@ -197,6 +204,7 @@ func (r Reader) walk(o *observation, selected map[string]bool, request string, l
 		prev = &digest
 		generation = rc.HeadGeneration.Uint64()
 		result.LastSeq = rc.Seq
+		result.LastReceiptSha256 = digest
 	}
 	result.StructuralConsistency = "CONSISTENT"
 	if result.SemanticCoverage != "UNKNOWN" {
@@ -211,6 +219,12 @@ func (r Reader) walk(o *observation, selected map[string]bool, request string, l
 		}
 	}
 	result.ProjectionAgreement = "AGREES"
+	if r.divergentIntent != "" {
+		result.ProjectionAgreement = "ALL_EXCEPT_TARGET_AGREE"
+	}
+	if r.unpauseTickets {
+		result.ProjectionAgreement = "TICKETS_NOT_COMPARED"
+	}
 	if !checkIntent {
 		result.ProjectionAgreement = "PRIVATE_AGREES_INTENT_NOT_OBSERVED"
 	}
@@ -296,6 +310,15 @@ func (r Reader) validateRecord(p string, raw []byte, rc *snapshot.Receipt) (bool
 		}
 		if p != "intent/tickets/"+t.TicketID.Local+".json" {
 			return false, nil, wire.Errorf(wire.CodeJournalForked, p, "ticket filename identity differs")
+		}
+		return true, nil, nil
+	case strings.HasPrefix(p, "intent/releases/"):
+		x, err := release.Decode(raw)
+		if err != nil {
+			return false, nil, err
+		}
+		if p != "intent/releases/"+x.ReleaseID+".json" {
+			return false, nil, wire.Errorf(wire.CodeJournalForked, p, "release filename identity differs")
 		}
 		return true, nil, nil
 	case p == "barrier.json":
@@ -407,6 +430,16 @@ func checkScope(v wire.Value, q wire.QueueID) error {
 
 func (r Reader) projections(o *observation, canonical map[string]latest, checkIntent bool) error {
 	for p, record := range canonical {
+		if r.unpauseTickets && strings.HasPrefix(p, "intent/tickets/") {
+			info, present := o.files[p]
+			if !present || !info.Mode().IsRegular() {
+				return wire.Errorf(wire.CodeIntentDiverged, p, "canonical ticket lacks a regular physical projection")
+			}
+			continue
+		}
+		if p == r.divergentIntent {
+			continue
+		}
 		if !checkIntent && strings.HasPrefix(p, "intent/") {
 			continue
 		}

@@ -1,0 +1,60 @@
+func TestAuditProjectionEditNotAdopted(t *testing.T) {
+ repo, _ := initialized(t)
+ created := mutate(t, repo, envelope("audit-create", mutation.OpCreate, "", "", createPayload("original")))
+ loaded, err := intent.Load(repo.PrimaryWorktree); if err != nil { t.Fatal(err) }
+ rec, _ := loaded.Inventory.Get(created.Ticket)
+ rec.Title = "manually injected title"
+ fixture.Write(t, filepath.Join(repo.PrimaryWorktree, intent.Dir, intent.TicketsDir, rec.TicketID.Local+".json"), rec.Encode())
+ report, err := store.Mutate(context.Background(), repo, operator(), envelope("audit-prioritize", mutation.OpPrioritize, created.Ticket, "1", obj("priority",str("P1"),"order",str("0"))), now(t))
+ if err == nil && report.Outcome.Outcome == mutation.OutcomeCompleted { t.Fatalf("BUG: divergent title silently adopted in receipt=%s resulting revision=%s", report.Receipt, *report.Outcome.ResultingRevision) }
+}
+
+func TestAuditWrongBranchRefusesMutation(t *testing.T) {
+ repo, _ := initialized(t)
+ fixture.Write(t, filepath.Join(repo.CommonDir,"HEAD"), []byte("ref: refs/heads/other\n"))
+ report, err := store.Mutate(context.Background(), repo, operator(), envelope("audit-branch",mutation.OpCreate,"","",createPayload("wrong branch")),now(t))
+ if err == nil && report.Outcome.Outcome == mutation.OutcomeCompleted { t.Fatalf("BUG: queue.intentBranch=main, HEAD=other yet receipt=%s",report.Receipt) }
+}
+
+func TestAuditAllBarrierRefusesMutation(t *testing.T) {
+ repo, _ := initialized(t)
+ barrier:=obj("profile",str("taskman-barrier/0"),"queueId",str(fixture.QueueID),"scope",str("ALL"),"reason",str("EMERGENCY"),"actor",str("tester"),"sinceSeq",str("1"),"since",str(issued))
+ fixture.Write(t,filepath.Join(repo.StateDir,"barrier.json"),wire.EncodeFile(barrier))
+ report, err := store.Mutate(context.Background(),repo,operator(),envelope("audit-barrier",mutation.OpCreate,"","",createPayload("all barrier")),now(t))
+ if err == nil && report.Outcome.Outcome == mutation.OutcomeCompleted { t.Fatalf("BUG: scope=ALL yet receipt=%s",report.Receipt) }
+}
+
+func TestAuditInvalidInitDoesNotStrandStore(t *testing.T) {
+ repo:=fixture.TempRepo(t)
+ fixture.Write(t,filepath.Join(repo.IntentDir,"queue.json"),fixture.QueueBytes())
+ fixture.Write(t,filepath.Join(repo.IntentDir,"policy.json"),fixture.PolicyBytes())
+ resolved,err:=intent.Resolve(repo.Root); if err!=nil {t.Fatal(err)}
+ bad,err:=store.Init(context.Background(),resolved,mutation.Binding{ID:"tester",Role:"INVALID"},"audit-invalid",now(t)); if err!=nil {t.Fatal(err)}
+ good,err:=store.Init(context.Background(),resolved,operator(),"audit-valid",now(t)); if err!=nil {t.Fatal(err)}
+ if good.Receipt=="" {t.Fatalf("BUG: invalid init=%s then valid init=%s receipt=%q detail=%q",bad.Outcome.Outcome,good.Outcome.Outcome,good.Receipt,good.Detail)}
+}
+
+func TestAuditCreateReplayPreservesTicketID(t *testing.T) {
+ repo,_:=initialized(t)
+ env:=envelope("audit-replay",mutation.OpCreate,"","",createPayload("retry"))
+ first:=mutate(t,repo,env)
+ replay:=mutate(t,repo,env)
+ if first.Ticket != replay.Ticket {t.Fatalf("BUG: first ticket=%q, replay ticket=%q",first.Ticket,replay.Ticket)}
+}
+
+func TestAuditUnsupportedStoreStatesRefuseMutation(t *testing.T) {
+ for _, scenario:=range []string{"version","restore-marker","primary-mismatch"} {t.Run(scenario,func(t *testing.T) {
+ repo,_:=initialized(t)
+ switch scenario {
+ case "version": fixture.Write(t,filepath.Join(repo.StateDir,"VERSION"),[]byte("taskman-state/9\n"))
+ case "restore-marker": fixture.Write(t,filepath.Join(repo.StateDir,"RESTORE_INCOMPLETE"),[]byte("restore incomplete\n"))
+ case "primary-mismatch":
+ raw,e:=os.ReadFile(filepath.Join(repo.StateDir,"head.json")); if e!=nil {t.Fatal(e)}
+ value,e:=wire.Parse(raw);if e!=nil {t.Fatal(e)}
+ value.Obj.Set("primaryWorktree",str("/private/tmp/other"))
+ fixture.Write(t,filepath.Join(repo.StateDir,"head.json"),wire.EncodeFile(value))
+ }
+ report,err:=store.Mutate(context.Background(),repo,operator(),envelope("audit-guard",mutation.OpCreate,"","",createPayload("guard")),now(t))
+ if err==nil && report.Outcome.Outcome==mutation.OutcomeCompleted {t.Fatalf("BUG: %s accepted receipt=%s",scenario,report.Receipt)}
+ })}
+}

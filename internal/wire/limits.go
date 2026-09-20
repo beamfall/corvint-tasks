@@ -22,6 +22,7 @@ const (
 	MaxProseBytes     = 64 * KiB
 
 	MaxTicketFileBytes       = 128 * KiB
+	MaxReleaseFileBytes      = 256 * KiB
 	MaxMutationEnvelopeBytes = 256 * KiB
 	MaxOutcomeBytes          = 64 * KiB
 
@@ -37,6 +38,7 @@ const (
 	MaxCapabilities       = 32
 
 	MaxTicketsPerQueue  = 10000
+	MaxReleasesPerQueue = 1000
 	MaxIntentTreeBytes  = 256 * MiB
 	MaxQueueFileBytes   = 1 * MiB
 	MaxPolicyFileBytes  = 256 * KiB

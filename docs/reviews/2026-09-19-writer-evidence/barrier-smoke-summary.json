@@ -1,0 +1,18 @@
+{
+  "result": "PASS",
+  "fixture": "/private/tmp/corvint-tasks-build-20260919/barrier-smoke-usd7vcj5",
+  "steps": 16,
+  "headSeq": "8",
+  "scenarios": [
+    "ADMISSION pause",
+    "NoChange",
+    "ticket creation while paused",
+    "unpause",
+    "old pause and unpause retries leave later state unchanged",
+    "unpause preserves empty ticket edit",
+    "reconcile inspection observes removed barrier",
+    "KEEP restores empty edit",
+    "final complete receipt audit"
+  ],
+  "qualification": "NOT_OBSERVED"
+}

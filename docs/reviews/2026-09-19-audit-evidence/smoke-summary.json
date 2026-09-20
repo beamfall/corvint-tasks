@@ -1,0 +1,150 @@
+{
+  "baseline": "5117b9238f9ccc7caf01bc9a5e0ab1877ba76208",
+  "fixture_only": true,
+  "results": [
+    {
+      "argv": [
+        "help"
+      ],
+      "outcome": "OK",
+      "exit": 0
+    },
+    {
+      "argv": [
+        "version"
+      ],
+      "outcome": "OK",
+      "exit": 0
+    },
+    {
+      "argv": [
+        "init"
+      ],
+      "outcome": "OK",
+      "exit": 0
+    },
+    {
+      "argv": [
+        "ticket",
+        "create",
+        "--request-id",
+        "smoke-create",
+        "--issued-at",
+        "2026-09-19T12:00:00Z"
+      ],
+      "outcome": "OK",
+      "exit": 0,
+      "returned_ticket_id": "ticket:acme:main:AT-0002",
+      "replayed": false
+    },
+    {
+      "argv": [
+        "ticket",
+        "list"
+      ],
+      "outcome": "OK",
+      "exit": 0
+    },
+    {
+      "argv": [
+        "ticket",
+        "show",
+        "ticket:acme:main:AT-0002"
+      ],
+      "outcome": "OK",
+      "exit": 0
+    },
+    {
+      "argv": [
+        "roadmap"
+      ],
+      "outcome": "OK",
+      "exit": 0
+    },
+    {
+      "argv": [
+        "gate",
+        "list"
+      ],
+      "outcome": "OK",
+      "exit": 0
+    },
+    {
+      "argv": [
+        "queue",
+        "status"
+      ],
+      "outcome": "OK",
+      "exit": 0
+    },
+    {
+      "argv": [
+        "ticket",
+        "create",
+        "--request-id",
+        "smoke-create",
+        "--issued-at",
+        "2026-09-19T12:00:00Z"
+      ],
+      "outcome": "OK",
+      "exit": 0,
+      "returned_ticket_id": "",
+      "replayed": true
+    },
+    {
+      "argv": [
+        "admit"
+      ],
+      "outcome": "NOT_RUN",
+      "exit": 1
+    },
+    {
+      "argv": [
+        "plan",
+        "preview"
+      ],
+      "outcome": "NOT_RUN",
+      "exit": 1
+    },
+    {
+      "argv": [
+        "receipt",
+        "audit"
+      ],
+      "outcome": "NOT_RUN",
+      "exit": 1
+    },
+    {
+      "argv": [
+        "cancel"
+      ],
+      "outcome": "NOT_RUN",
+      "exit": 1
+    },
+    {
+      "argv": [
+        "archive",
+        "restore"
+      ],
+      "outcome": "NOT_RUN",
+      "exit": 1
+    },
+    {
+      "argv": [
+        "archive",
+        "export"
+      ],
+      "outcome": "OK",
+      "bytes": 24064
+    },
+    {
+      "argv": [
+        "archive",
+        "verify",
+        "/private/tmp/corvint-tasks-audit-20260919/fixture.tar"
+      ],
+      "outcome": "OK",
+      "exit": 0
+    }
+  ]
+}
