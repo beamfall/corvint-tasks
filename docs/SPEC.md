@@ -1135,7 +1135,9 @@ Normal bytes-plus-EOF and the exact encoded cap remain valid.
   foreign write adapter, automatic reviewer routing, vendor SDKs, a daemon, database service, UI,
   network fetch, cross-repository scheduling, a sandbox claim for process groups, exactly-once
   external effects, and any vendor capability profile that has not been probed and pinned.
-  (ATCP-V0-011, 014; ATM §5; WQO §11)
+  (ATCP-V0-011, 014; ATM §5; WQO §11) Decision 0011 schedules a Beamfall adapter and scheduling
+  across one Beamfall workspace's repositories as TCP-09..14; both stay unavailable, and are
+  reported so, until those rows are qualified.
 - `TM-V0-027` (owner steering 2026-09-06, exact: "I want you to ensure that this functionality
   doesn't slow down the main go binary speed"): The task control plane never slows an existing
   `corvint` command. Storage, journal, execution and planning live in `corvint-tasks` and in this
@@ -2573,7 +2575,8 @@ evidence of absent contention. Nothing in this section is measured at this revis
 - U1: The Corvint-side records (ATCP intent status, the ATM amendment file, `docs/specs/README.md`)
   cannot be written from this repository. Decision 0001 accepts §8 for this repository; the
   Corvint repository still needs its own amendment commit.
-- U2: TCP-09 (Beamfall adapter and recorder) has no owner; it does not block Corvint-only serial use.
+- U2: TCP-09 (Beamfall adapter and recorder) is owned by the owner under decision 0011 and starts
+  after Corvint 1.0; it does not block Corvint-only serial use.
 - U3: Go 1.27.1 `make verify` executes format, all tests and vet. The 2026-09-19 baseline passed; writer-repair validation is recorded separately. Passing this gate does not qualify G1..G6 or GP.
 - U4: Darwin `kern.proc.pid` start-time extraction and Linux `btime` parsing are asserted
   stdlib-feasible; TCP-02 must prove it with a synthetic process-table fixture.
