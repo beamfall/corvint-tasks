@@ -33,6 +33,7 @@ changed by TCP-00, TCP-01 or TCP-02; TCP-03 and TCP-06 may not be promoted witho
 | TCP-07 | P1 | TCP-03, TCP-06 | Bounded fanout: `maxActiveAttempts` > 1; contention envelope measured (AS-30, AS-32) | not-started |
 | TCP-08 | P1 | TCP-05, TCP-06 | Expert routing evaluation under ATM §7 thresholds, automatic reviewer selection | not-started |
 | TCP-09 | P2 | TCP-00; operative use TCP-05, TCP-07 | Beamfall adapter and recorder under its own owner; foreign execution disabled until qualified | not-started; no owner (SPEC §10 U2) |
+| V1-0208 | P1 | TCP-02, TCP-02b | `policy update` journaled OWNER/OPERATOR policy replacement for fixture queues (ATM-V0-027; TM-V0-030; SPEC §5.7.3; AS-07, AS-11, AS-38) | delivered 2026-09-24 (decision 0010): one `POLICY_UPDATE` transaction replaces `intent/policy.json` at the next `policyVersion`; the receipt carries the old and new policy sha256; stale versions, skipped versions, WORKER/REVIEWER roles and guard failures refuse without changing the store; exact retries replay and conflicting reuse refuses; a candidate captured under the old policy reports `candidate-source-or-policy`. Crash/power-loss qualification and attestation-to-policy argv checking remain NOT_RUN |
 
 ## TCP-01 experimental support inventory (review passed, 2026-09-06)
 

@@ -56,6 +56,10 @@ type Report struct {
 	// learns its own id here and nowhere else.
 	Ticket  string
 	Release string
+	// OldPolicySha256 and NewPolicySha256 are the policy digests a committed
+	// PolicyUpdate replaced and wrote; the receipt's pre/post entries carry
+	// the same values.
+	OldPolicySha256, NewPolicySha256 wire.Digest
 }
 
 // target maps one plan artifact onto the publication destination its path

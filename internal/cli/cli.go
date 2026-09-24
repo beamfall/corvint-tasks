@@ -43,7 +43,7 @@ type Env struct {
 var ReadVerbs = []string{
 	"help", "version", "ticket list", "ticket search", "ticket show", "ticket blockers", "ticket export",
 	"queue status", "roadmap", "gate list", "gate show", "archive export", "archive verify", "receipt audit", "reconcile inspect", "reconcile intent",
-	"init", "pause", "unpause",
+	"init", "pause", "unpause", "policy update",
 	"ticket create", "ticket refine", "ticket prioritize", "ticket set-dependencies",
 	"ticket set-gates", "ticket set-effects", "ticket hold", "ticket release-hold", "ticket reopen",
 	"ticket archive", "ticket restore", "ticket complete-manual", "ticket grant-approval",
@@ -111,6 +111,8 @@ func Run(env Env) int {
 		return emit(env.Stdout, releaseCommand(env, args[1], args[2:]))
 	case "pause", "unpause":
 		return emit(env.Stdout, barrierCommand(env, args[0], args[1:]))
+	case "policy":
+		return emit(env.Stdout, policyCommand(env, args[1:]))
 	case "init":
 		return emit(env.Stdout, initCommand(env, args[1:]))
 	case "queue":
@@ -244,12 +246,13 @@ func helpResult() *wire.Result {
 		"corvint-tasks archive export [--staging DIR]   (stream on stdout, envelope on stderr)",
 		"corvint-tasks archive verify [FILE|-]           (stdin when absent)",
 		"corvint-tasks init [--role ROLE] [--request-id ID]",
+		"corvint-tasks policy update --request-id ID --expected-policy-version N --file PATH [--role OWNER|OPERATOR]",
 		"corvint-tasks ticket <mutation> --request-id ID (--payload JSON | --payload-stdin) [--target TICKET --expected-revision N] [--issued-at TS] [--role ROLE]",
 		"corvint-tasks release create|update|candidate|record-gate|promote --request-id ID --target RELEASE [--expected-revision N] [--payload JSON] [--role ROLE]",
 		"corvint-tasks release list|show RELEASE|readiness RELEASE",
 		"corvint-tasks version",
 	}))
-	o.Set("note", wire.String("every read takes no lock and writes nothing, and reports journal facts it cannot observe as NOT_OBSERVED; `init` and the fourteen `ticket` mutations commit through the §5.2 writer (TCP-02/TCP-02b); the administrative verbs answer NOT_RUN"))
+	o.Set("note", wire.String("every read takes no lock and writes nothing, and reports journal facts it cannot observe as NOT_OBSERVED; `init`, `policy update` and the fourteen `ticket` mutations commit through the §5.2 writer (TCP-02/TCP-02b); the administrative verbs answer NOT_RUN"))
 	return &wire.Result{Command: []string{"help"}, Outcome: wire.OutcomeOK, Items: []wire.Value{wire.ObjectValue(o)}}
 }
 

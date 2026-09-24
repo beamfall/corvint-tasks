@@ -39,6 +39,11 @@ const (
 	LocalOperator = "OBSERVED_LOCAL_OPERATOR"
 )
 
+// PolicyUpdate replaces intent/policy.json with the next policyVersion
+// (ATM-V0-027, TM-V0-030, decision 0010). Request.Policy carries the new
+// canonical bytes; it posts nothing else.
+const PolicyUpdate = snapshot.StagePolicyUpdate
+
 type Coverage struct {
 	ActorAuthentication, AdministrativeAuthorization       string
 	InventoryObservation, Durability, RuntimeQualification string
@@ -62,6 +67,9 @@ type Request struct {
 	// (TM-V0-006), so an identical retry replays and any other byte sequence
 	// under the same requestId is REQUEST_ID_CONFLICT.
 	Envelope []byte
+	// ExpectedPolicyVersion is the policyVersion the caller read, set only for
+	// PolicyUpdate.
+	ExpectedPolicyVersion wire.Size
 }
 
 // ReplayObservation is mandatory; zero/unknown/error never means absence.
@@ -172,8 +180,14 @@ func Digest(r Request) (wire.Digest, error) {
 	if len(r.File) > fileLimit {
 		return "", limit("offered file")
 	}
-	if r.Operation != Init && (len(r.Queue) != 0 || len(r.Policy) != 0 || r.PrimaryWorktree != "") {
+	if r.Operation != Init && (len(r.Queue) != 0 || r.PrimaryWorktree != "") {
 		return "", malformed("inapplicable INIT inputs")
+	}
+	if r.Operation != Init && r.Operation != PolicyUpdate && len(r.Policy) != 0 {
+		return "", malformed("inapplicable policy input")
+	}
+	if r.Operation != PolicyUpdate && r.ExpectedPolicyVersion != "" {
+		return "", malformed("inapplicable expected policy version")
 	}
 	if r.Operation != KeepJournal && r.Operation != Release && r.CanonicalSha256 != "" {
 		return "", malformed("inapplicable canonical choice")
@@ -210,6 +224,18 @@ func Digest(r Request) (wire.Digest, error) {
 		o.Obj.Set("queueSha256", s(string(wire.Sum(r.Queue))))
 		o.Obj.Set("policySha256", s(string(wire.Sum(r.Policy))))
 		o.Obj.Set("versionSha256", s(string(wire.Sum([]byte(snapshot.VersionBytes)))))
+	case PolicyUpdate:
+		if _, e = wire.ParseSize("expectedPolicyVersion", string(r.ExpectedPolicyVersion)); e != nil {
+			return "", e
+		}
+		if _, e = intent.DecodePolicy(r.Policy); e != nil {
+			return "", e
+		}
+		if e = canonical(r.Policy); e != nil {
+			return "", e
+		}
+		o.Obj.Set("expectedPolicyVersion", s(string(r.ExpectedPolicyVersion)))
+		o.Obj.Set("policySha256", s(string(wire.Sum(r.Policy))))
 	case Pause:
 		o.Obj.Set("reason", s("OPERATOR"))
 		o.Obj.Set("scope", s("ADMISSION"))
@@ -381,7 +407,7 @@ func Model(r Request, in Input) Result {
 	if r.Operation == Unpause && state.barrier == nil {
 		return noChange(r.RequestID)
 	}
-	if (r.Operation == Init || r.Operation == KeepJournal || r.Operation == AdoptFile || r.Operation == Mutate || r.Operation == Release) && in.Branch != state.queue.IntentBranch {
+	if (r.Operation == Init || r.Operation == KeepJournal || r.Operation == AdoptFile || r.Operation == Mutate || r.Operation == Release || r.Operation == PolicyUpdate) && in.Branch != state.queue.IntentBranch {
 		return refused(r.RequestID, mutation.OutcomeBlocked, wire.CodeIntentBranchMismatch, "primary intent branch differs")
 	}
 	posts := map[string][]byte{}
@@ -405,6 +431,24 @@ func Model(r Request, in Input) Result {
 		posts["barrier.json"] = wire.EncodeFile(object("profile", s(snapshot.ProfileBarrier), "queueId", s(r.QueueID), "scope", s("ADMISSION"), "reason", s("OPERATOR"), "actor", s(r.Actor.ID), "sinceSeq", s(string(wire.SizeOf(state.head.LastSeq.Uint64()+1))), "since", s(string(in.RecordedAt))))
 	case Unpause:
 		posts["barrier.json"] = nil
+	case PolicyUpdate:
+		// TM-V0-030: the caller's expected version must be the current one, and
+		// the new file must be exactly the next version.
+		current := state.policy.PolicyVersion
+		if r.ExpectedPolicyVersion.Uint64() != current.Uint64() {
+			return refused(r.RequestID, mutation.OutcomeRevisionConflict, "", "expectedPolicyVersion "+string(r.ExpectedPolicyVersion)+" but the current policy is at version "+string(current))
+		}
+		next, e := intent.DecodePolicy(r.Policy)
+		if e != nil {
+			return failed(r.RequestID, e)
+		}
+		if next.PolicyVersion.Uint64() != current.Uint64()+1 {
+			return failed(r.RequestID, malformed("policyVersion must be the current version plus one"))
+		}
+		if len(next.Runtimes) != 0 {
+			return failed(r.RequestID, malformed("runtime inventory outside subset"))
+		}
+		posts["intent/policy.json"] = bytes.Clone(r.Policy)
 	case Mutate:
 		env, e := mutation.Decode(r.Envelope)
 		if e != nil {

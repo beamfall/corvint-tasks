@@ -250,7 +250,9 @@ cemRequired:boolean, ocmRequired:boolean, runtimes:[RuntimeEntry], environment:
 budget field"); `turns` and `wallClockMinutes` are `Count` (B1 resolution, 2026-09-06; witness
 `TestTMV0002_AS10_LaneBudgetPrimitives`). Policy identity `policy:sha256:*` is pinned per attempt.
 Workers cannot write policy: policy changes are `OWNER`/`OPERATOR` mutations and are themselves
-tasks (ATM-V0-027).
+tasks (ATM-V0-027). After `init`, `policy update` is the only writer of `intent/policy.json`
+(TM-V0-030, §5.7.3): each change advances `policyVersion` by exactly one and commits a
+`POLICY_UPDATE` receipt.
 
 `RuntimeEntry` (closed): `runtimeId:label, executable:{pathSha256:Digest, fileSha256:Digest,
 mode:Identifier} (WQO ExecutableIdentity), argvPrefix:[Identifier] (literal, ≤16),
@@ -670,7 +672,7 @@ sha256:Digest|null, record:object|null, blobSha256:Digest|null}], outcome, codes
 recordedAt`. `kind` is exactly `INIT | MUTATION | ADMIT | TRANSITION | EFFECT_INTENT |
 EFFECT_OUTCOME | GATE_RESULT | REVIEW | MANIFEST | RELEASE | PAUSE | UNPAUSE | DRAIN |
 IMPORT_PLAN | IMPORT_APPLY | AUTHORITY_SWITCH | ARCHIVE | RESTORE | PRUNE | RECONCILE |
-ADJUDICATE | CONFIG_PIN | QUALIFICATION`. `outcome` uses exactly the §3.3 outcome enum. A `MUTATE`
+ADJUDICATE | CONFIG_PIN | QUALIFICATION | POLICY_UPDATE`. `outcome` uses exactly the §3.3 outcome enum. A `MUTATE`
 transaction records the kind its operation names: `ARCHIVE` for `ARCHIVE`, `RESTORE` for
 `RESTORE`, and `MUTATION` for every other §3.3 mutation. The stage operation name is `MUTATE` for
 all of them, because the staged artifact shape does not vary with the verb.
@@ -1149,6 +1151,13 @@ Normal bytes-plus-EOF and the exact encoded cap remain valid.
   "no slowdown", "unchanged" or "negligible" claim is made. Active `corvint-tasks` on the same host is
   covered by §9.4's contention rows; process separation alone is not evidence of absent
   contention. No existing Corvint latency budget is relaxed. (owner steering; ATCP-V0-020)
+- `TM-V0-030`: After `init`, the fixture policy changes only through `policy update`, an
+  `OWNER`/`OPERATOR` journaled transaction whose receipt kind is `POLICY_UPDATE`. The new file
+  must decode as canonical `taskman-policy/0`, carry `policyVersion` equal to the caller's
+  `expectedPolicyVersion` plus one, and name the current version; queue identity and profile
+  cannot change. `WORKER` and `REVIEWER` are refused `UNAUTHORIZED`. Exact retries replay and a
+  reused request id with different bytes conflicts. (ATM-V0-027; decision 0010; AS-07, AS-11,
+  AS-38)
 - `TM-V0-028`: Fixture queues may model ordered releases under decision 0009. The public release
   read contract exposes the complete definition, canonical candidate, attestation and promotion
   digests, and their bindings so compatible evidence and successor releases can be driven without
@@ -1603,6 +1612,53 @@ Named regressions (the test identifiers carry TM-V0 and AS traceability):
 `TestTMV0016_AS27_BarrierTemplatesExemptionsAndNoChange` /
 `TestTMV0006_AS03_TicketCreateRetryReplays`.
 
+### 5.7.3 Policy update (decision 0010, 2026-09-24)
+
+`corvint-tasks policy update --request-id ID --expected-policy-version N --file PATH
+[--role OWNER|OPERATOR]` implements ATM-V0-027 and TM-V0-030. The role defaults to `OWNER`.
+`WORKER` and `REVIEWER` are refused `UNAUTHORIZED` before the store is opened. `--file` is read
+through the bounded no-symlink reader under the 256 KiB policy file limit. The request digest
+binds the operation, queue, request id, actor, `expectedPolicyVersion` and the new policy's
+sha256.
+
+`internal/store.PolicyUpdate` follows the same order as the other writers:
+1. Take the lock.
+2. Apply the restore, `VERSION` and `ALL`-barrier guards.
+3. Check the queue scope.
+4. Redo any pending receipt.
+5. Look up the request index. An exact retry replays, and the same id with different bytes is
+   `REQUEST_ID_CONFLICT`.
+6. Audit queue, policy, tickets and releases.
+7. Check the intent branch.
+8. Bind the observation.
+
+The model then:
+- refuses a stale `expectedPolicyVersion` with `REVISION_CONFLICT`;
+- rejects a new `policyVersion` other than current plus one as `VALIDATION_FAILED` `MALFORMED`;
+- rejects a non-canonical or foreign-profile file (`MALFORMED` or `UNSUPPORTED_VERSION`);
+- keeps the fixture no-runtime rule.
+
+The policy carries no queue identity, and the queue file is unchanged, so neither can move.
+
+The plan's only post is `intent/policy.json`, staged as the `POLICY_UPDATE` stage operation. It
+commits through the §5.2 writer: evidence, then receipt link-in, then post, then head. The
+receipt's `pre` and `post` entries for `intent/policy.json` carry the old and new policy sha256,
+and the CLI result repeats them as `oldPolicySha256` and `newPolicySha256`. Readers and
+`receipt audit` accept the kind. Because a release candidate pins the policy digest, a committed
+update makes an earlier candidate report `candidate-source-or-policy` (TM-V0-028).
+
+Evidence:
+- `TestTMV0030_AS11_PolicyUpdateCommitsAndReplays`
+- `TestTMV0030_AS11_PolicyUpdateRefusalsPreserveStore`
+- `TestTMV0030_AS11_PolicyUpdateRedoesPendingReceiptFirst`
+- `TestTMV0030_AS11_PolicyUpdatePublicationReturnedFault`
+- `TestTMV0030_AS07_CLIPolicyUpdateAuditAndReplay`
+- `TestTMV0030_AS07_CLIPolicyUpdateRefusals`
+- `TestTMV0030_AS38_PolicyUpdateInvalidatesReleaseCandidate`
+
+Roles are self-declared (decision 0003). Release attestations are not yet checked against policy
+gate argv. Crash, power-loss and hostile-editor qualification remain `NOT_RUN`.
+
 ### 5.2 Transaction and commit points
 
 ```
@@ -1794,12 +1850,14 @@ This avoids a future archive -> transaction -> archive cycle without activating 
    | KEEP_JOURNAL | 6 | 1676 |
    | ADOPT_FILE | 5 | 1467 |
    | MUTATE | 6 | 1615 |
+   | POLICY_UPDATE | 5 | 1470 |
 
    These are structural upper witnesses, not claims that every maximal payload coexists in a
    reachable transaction. Ticket/queue widths obey queueBytes+localBytes<=126. INIT's closed
    post bounds are VERSION16, queue1048576, policy262144, reservations194, pinned INIT8465,
    request551; administrative request563 and reconciliation request579 apply in the other
-   rows. Receipt1048576/head4096 and existing ticket/blob bounds apply; minimal UNPAUSE
+   rows, and POLICY_UPDATE uses request579 with one policy262144 post and one policy262144
+   evidence slot. Receipt1048576/head4096 and existing ticket/blob bounds apply; minimal UNPAUSE
    receipt1683 is tighter. Actual head encoding must still fit 4096. The only proposed flat
    staging names are active.json, active.json.tmp and a00..a10: at most thirteen files plus
    staging/ (fourteen scanned entries). They would be excluded from F/M/T/Jn/Jb/Eb and charged
@@ -2578,6 +2636,7 @@ UNPUBLISHED, UNRESOLVED_FINDING, UNSUPPORTED, UNSUPPORTED_FILESYSTEM, UNSUPPORTE
 | 027 | 020 (evidence rule); owner steering 2026-09-06 | — | 03, 04, 06, 07 | AS-31, AS-32 (GP) |
 | 028 | owner decision 0009 | ATM-V0-028 | 02 | AS-38 |
 | 029 | owner decision 0009 (public read closure for 028) | ATM-V0-028 | 02 | AS-38 |
+| 030 | owner decision 0010 (V1-0208) | ATM-V0-027 | 02 | AS-07, AS-11, AS-38 |
 
 The table maps obligations to slices and acceptance scenarios. Executed support/fixture evidence is recorded in `docs/reviews/`; unimplemented runtime and qualification scenarios remain NOT_RUN. A passed package or repository gate does not fill a qualification cell.
 
