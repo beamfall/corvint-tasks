@@ -96,7 +96,7 @@ func TestTMV0030_AS11_PolicyUpdateRefusalsPreserveStore(t *testing.T) {
 		outcome string
 		code    string
 	}{
-		{"stale", mutation.OutcomeRevisionConflict, ""},
+		{"stale", mutation.OutcomeRevisionConflict, wire.CodeStalePolicy},
 		{"skip", mutation.OutcomeValidationFailed, wire.CodeMalformed},
 		{"same", mutation.OutcomeValidationFailed, wire.CodeMalformed},
 		{"malformed", "", wire.CodeMalformed},

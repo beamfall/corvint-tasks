@@ -187,7 +187,7 @@ func Apply(ctx Context, env *Envelope) *Plan {
 	plan.Pre = pre
 	// TM-V0-005: expectedRevision must equal the current revision.
 	if *env.ExpectedRevision != pre.Revision {
-		return plan.refused(refuse(OutcomeRevisionConflict, "", "expectedRevision %s but the canonical record is at revision %s", *env.ExpectedRevision, pre.Revision))
+		return plan.refused(refuse(OutcomeRevisionConflict, wire.CodeStaleTicket, "expectedRevision %s but the canonical record is at revision %s", *env.ExpectedRevision, pre.Revision))
 	}
 	work, err := clone(pre)
 	if err != nil {
