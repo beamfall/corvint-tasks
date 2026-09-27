@@ -883,7 +883,7 @@ admitted until every prior generation of that attempt is `PROVED` or `FENCED` in
   review or gate-incomplete run changes a task status; only the §7.3 reducer or an explicit
   `COMPLETE_MANUAL` does, and a manual completion is labelled `MANUAL` forever. (ATCP-V0-004/005)
 - `TM-V0-005`: Mutations use the §3.3 envelope and role matrix. `expectedRevision` must equal the
-  current revision or the outcome is `REVISION_CONFLICT` with no write. Validation rejects
+  current revision or the outcome is `REVISION_CONFLICT` with code `STALE_TICKET` and no write. Validation rejects
   missing dependencies, dependency cycles (including self and via `GATE_PASSED`), duplicate or
   case-folded duplicate local tokens, unknown gates, invalid priority or order, unknown
   operations, and unauthorized roles; `VALIDATION_FAILED`/`UNAUTHORIZED` never write. Holds,
@@ -1635,7 +1635,7 @@ sha256.
 8. Bind the observation.
 
 The model then:
-- refuses a stale `expectedPolicyVersion` with `REVISION_CONFLICT`;
+- refuses a stale `expectedPolicyVersion` with `REVISION_CONFLICT` and code `STALE_POLICY`;
 - rejects a new `policyVersion` other than current plus one as `VALIDATION_FAILED` `MALFORMED`;
 - rejects a non-canonical or foreign-profile file (`MALFORMED` or `UNSUPPORTED_VERSION`);
 - keeps the fixture no-runtime rule.

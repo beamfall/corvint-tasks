@@ -410,13 +410,13 @@ func TestTMV0005_AS02_SerialAllocationSkipsOccupied(t *testing.T) {
 }
 
 // TestTMV0005_AS02_StaleExpectedRevision: a stale expectedRevision is
-// REVISION_CONFLICT with no post record and byte-identical inputs.
+// REVISION_CONFLICT with code STALE_TICKET, no post record and byte-identical inputs.
 func TestTMV0005_AS02_StaleExpectedRevision(t *testing.T) {
 	at01 := fixture.Ticket("AT-01")
 	before := string(at01.Encode())
 	ctx := newCtx(t, owner, nil, at01)
 	plan := apply(t, ctx, envelope("r1", owner, "AT-01", "5", mutation.OpRefine, obj("title", str("x"))))
-	want(t, plan, mutation.OutcomeRevisionConflict, "")
+	want(t, plan, mutation.OutcomeRevisionConflict, wire.CodeStaleTicket)
 	if string(at01.Encode()) != before {
 		t.Fatalf("record changed on conflict")
 	}
@@ -721,7 +721,7 @@ func TestTMV0006_AS03_ReplayAndConflict(t *testing.T) {
 	// A recorded refusal replays as that refusal.
 	stale := envelope("req-3", owner, "AT-01", "7", mutation.OpRefine, obj("title", str("x")))
 	p := apply(t, ctx, stale)
-	want(t, p, mutation.OutcomeRevisionConflict, "")
+	want(t, p, mutation.OutcomeRevisionConflict, wire.CodeStaleTicket)
 	if err := idx.Record(mutation.IndexEntry{RequestID: "req-3", MutationSha256: p.MutationSha256, Outcome: p.Outcome}); err != nil {
 		t.Fatalf("record: %v", err)
 	}

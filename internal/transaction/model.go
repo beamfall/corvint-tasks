@@ -436,7 +436,7 @@ func Model(r Request, in Input) Result {
 		// the new file must be exactly the next version.
 		current := state.policy.PolicyVersion
 		if r.ExpectedPolicyVersion.Uint64() != current.Uint64() {
-			return refused(r.RequestID, mutation.OutcomeRevisionConflict, "", "expectedPolicyVersion "+string(r.ExpectedPolicyVersion)+" but the current policy is at version "+string(current))
+			return refused(r.RequestID, mutation.OutcomeRevisionConflict, wire.CodeStalePolicy, "expectedPolicyVersion "+string(r.ExpectedPolicyVersion)+" but the current policy is at version "+string(current))
 		}
 		next, e := intent.DecodePolicy(r.Policy)
 		if e != nil {
